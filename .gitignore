@@ -1,0 +1,65 @@
+# SO
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.pytype/
+.cache/
+.ipynb_checkpoints/
+
+# Entornos
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Logs y temporales
+logs/
+*.log
+tmp/
+*.pid
+
+# Docker
+docker-compose.override.yml
+data/
+volumes/
+
+# Base de datos local
+*.sqlite3
+*.db
+
+# Editores/IDE
+.vscode/
+.idea/
+*.iml
+
+# Frontend (si agregás UI)
+node_modules/
+.npm/
+.yarn/*
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+
+# Cobertura / reportes
+coverage/
+reports/
