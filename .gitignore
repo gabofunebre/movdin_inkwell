@@ -45,7 +45,7 @@ volumes/
 # Base de datos local
 *.sqlite3
 *.db
-
+./postgres_data/
 # Editores/IDE
 .vscode/
 .idea/
