@@ -1,5 +1,5 @@
 import { fetchAccounts, fetchInvoices, createInvoice } from './api.js';
-import { renderTransaction, showOverlay, hideOverlay } from './ui.js';
+import { renderInvoice, showOverlay, hideOverlay } from './ui.js';
 
 const tbody = document.querySelector('#inv-table tbody');
 const container = document.getElementById('table-container');
@@ -23,41 +23,47 @@ let accounts = [];
 let accountMap = {};
 let billingAccount = null;
 let invoices = [];
-let sortColumn = 0;
+let sortColumn = 1;
 let sortAsc = false;
 
 function renderInvoices() {
   const q = searchBox.value.trim().toLowerCase();
   const filtered = invoices.filter(inv => {
-    const accName = accountMap[inv.account_id]?.name.toLowerCase() || '';
+    const typeText = inv.type === 'sale' ? 'venta' : 'compra';
     return (
       inv.description.toLowerCase().includes(q) ||
       (inv.number || '').toLowerCase().includes(q) ||
-      accName.includes(q)
+      typeText.includes(q)
     );
   });
   filtered.sort((a, b) => {
     switch (sortColumn) {
       case 0:
         return sortAsc
+          ? (a.number || '').localeCompare(b.number || '')
+          : (b.number || '').localeCompare(a.number || '');
+      case 1:
+        return sortAsc
           ? new Date(a.date) - new Date(b.date)
           : new Date(b.date) - new Date(a.date);
-      case 1:
+      case 2:
+        return sortAsc
+          ? a.type.localeCompare(b.type)
+          : b.type.localeCompare(a.type);
+      case 3:
         return sortAsc
           ? a.description.localeCompare(b.description)
           : b.description.localeCompare(a.description);
-      case 2:
-        return sortAsc ? a.amount - b.amount : b.amount - a.amount;
-      case 3:
-        const accA = accountMap[a.account_id]?.name || '';
-        const accB = accountMap[b.account_id]?.name || '';
-        return sortAsc ? accA.localeCompare(accB) : accB.localeCompare(accA);
+      case 4:
+        const totalA = Number(a.amount) + Number(a.iva_amount);
+        const totalB = Number(b.amount) + Number(b.iva_amount);
+        return sortAsc ? totalA - totalB : totalB - totalA;
       default:
         return 0;
     }
   });
   tbody.innerHTML = '';
-  filtered.forEach(inv => renderTransaction(tbody, inv, accountMap));
+  filtered.forEach(inv => renderInvoice(tbody, inv, accountMap));
 }
 
 function recalcTaxes() {
@@ -69,7 +75,6 @@ function recalcTaxes() {
   const iibbAmount = (amount + ivaAmount) * iibbPercent / 100;
   iibbAmountInput.value = iibbAmount.toFixed(2);
 }
-
 amountInput.addEventListener('input', recalcTaxes);
 ivaPercentInput.addEventListener('input', recalcTaxes);
 iibbPercentInput.addEventListener('input', recalcTaxes);

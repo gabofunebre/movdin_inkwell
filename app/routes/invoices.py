@@ -33,7 +33,6 @@ def create_invoice(payload: InvoiceCreate, db: Session = Depends(get_db)):
     else:
         iibb_percent = Decimal("0")
         iibb_amount = Decimal("0")
-
     inv = Invoice(
         account_id=payload.account_id,
         date=payload.date,

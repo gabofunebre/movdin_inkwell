@@ -34,6 +34,36 @@ export function renderTransaction(tbody, tx, accountMap) {
   tbody.appendChild(tr);
 }
 
+export function renderInvoice(tbody, inv, accountMap) {
+  const tr = document.createElement('tr');
+  const acc = accountMap[inv.account_id];
+  const currency = acc ? acc.currency : null;
+  const symbol = currency ? CURRENCY_SYMBOLS[currency] || '' : '';
+  const dateObj = new Date(inv.date);
+  const formattedDate = dateObj
+    .toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    })
+    .replace('.', '');
+  const typeText = inv.type === 'sale' ? 'Venta' : 'Compra';
+  const total = Number(inv.amount) + Number(inv.iva_amount);
+  const amountColor = total >= 0 ? 'rgb(40,150,20)' : 'rgb(170,10,10)';
+  const amount = Math.abs(total).toFixed(2);
+  tr.innerHTML =
+    `<td class="text-center">${inv.number || ''}</td>` +
+    `<td class="text-center">${formattedDate}</td>` +
+    `<td class="text-center">${typeText}</td>` +
+    `<td>${inv.description}</td>` +
+    `<td class="text-end" style="color:${amountColor}">${symbol} ${amount}</td>`;
+  tr.addEventListener('click', () => {
+    tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+    tr.classList.add('selected');
+  });
+  tbody.appendChild(tr);
+}
+
 export function populateAccounts(select, accounts) {
   select.innerHTML = '';
   accounts.forEach(acc => {
