@@ -55,10 +55,8 @@ function renderInvoices() {
           ? a.description.localeCompare(b.description)
           : b.description.localeCompare(a.description);
       case 4:
-        const totalA =
-          Number(a.amount) + Number(a.iva_amount) + Number(a.iibb_amount);
-        const totalB =
-          Number(b.amount) + Number(b.iva_amount) + Number(b.iibb_amount);
+        const totalA = Number(a.amount) + Number(a.iva_amount);
+        const totalB = Number(b.amount) + Number(b.iva_amount);
         return sortAsc ? totalA - totalB : totalB - totalA;
       default:
         return 0;

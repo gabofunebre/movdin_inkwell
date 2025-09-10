@@ -66,10 +66,19 @@ async def totals(request: Request):
 
 
 @app.get("/billing.html", response_class=HTMLResponse)
-async def billing(request: Request):
+async def billing(request: Request, db: Session = Depends(get_db)):
+    acc = db.query(Account).filter(Account.is_billing.is_(True)).first()
+    if acc:
+        title = f"Facturación - {acc.name}"
+        header_title = (
+            f"Facturación - <span style=\"color:{acc.color}\">{acc.name}</span>"
+        )
+    else:
+        title = "Facturación"
+        header_title = "Facturación"
     return templates.TemplateResponse(
         "billing.html",
-        {"request": request, "title": "Facturación", "header_title": "Facturación"},
+        {"request": request, "title": title, "header_title": header_title},
     )
 
 
@@ -82,7 +91,7 @@ async def invoice_detail(
         raise HTTPException(status_code=404, detail="Factura no encontrada")
     acc = db.get(Account, inv.account_id)
     symbol = CURRENCY_SYMBOLS.get(acc.currency) if acc else ""
-    total = inv.amount + inv.iva_amount + inv.iibb_amount
+    total = inv.amount + inv.iva_amount
     return templates.TemplateResponse(
         "invoice_detail.html",
         {

@@ -48,8 +48,7 @@ export function renderInvoice(tbody, inv, accountMap) {
     })
     .replace('.', '');
   const typeText = inv.type === 'sale' ? 'Venta' : 'Compra';
-  const total =
-    Number(inv.amount) + Number(inv.iva_amount) + Number(inv.iibb_amount);
+  const total = Number(inv.amount) + Number(inv.iva_amount);
   const amountColor = total >= 0 ? 'rgb(40,150,20)' : 'rgb(170,10,10)';
   const amount = Math.abs(total).toFixed(2);
   tr.innerHTML =
