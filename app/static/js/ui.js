@@ -48,7 +48,8 @@ export function renderInvoice(tbody, inv, accountMap) {
     })
     .replace('.', '');
   const typeText = inv.type === 'sale' ? 'Venta' : 'Compra';
-  const total = Number(inv.amount) + Number(inv.iva_amount);
+  const total =
+    Number(inv.amount) + Number(inv.iva_amount) + Number(inv.iibb_amount);
   const amountColor = total >= 0 ? 'rgb(40,150,20)' : 'rgb(170,10,10)';
   const amount = Math.abs(total).toFixed(2);
   tr.innerHTML =
@@ -57,9 +58,9 @@ export function renderInvoice(tbody, inv, accountMap) {
     `<td class="text-center">${typeText}</td>` +
     `<td>${inv.description}</td>` +
     `<td class="text-end" style="color:${amountColor}">${symbol} ${amount}</td>`;
+  tr.style.cursor = 'pointer';
   tr.addEventListener('click', () => {
-    tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
-    tr.classList.add('selected');
+    window.location.href = `/invoice/${inv.id}`;
   });
   tbody.appendChild(tr);
 }

@@ -1,10 +1,14 @@
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
-from config.db import init_db
+from sqlalchemy.orm import Session
+
+from config.db import get_db, init_db
+from config.constants import CURRENCY_SYMBOLS
+from models import Account, Invoice
 from routes.accounts import router as accounts_router
 from routes.health import router as health_router
 from routes.transactions import router as transactions_router
@@ -66,4 +70,28 @@ async def billing(request: Request):
     return templates.TemplateResponse(
         "billing.html",
         {"request": request, "title": "Facturación", "header_title": "Facturación"},
+    )
+
+
+@app.get("/invoice/{invoice_id}", response_class=HTMLResponse)
+async def invoice_detail(
+    request: Request, invoice_id: int, db: Session = Depends(get_db)
+):
+    inv = db.get(Invoice, invoice_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="Factura no encontrada")
+    acc = db.get(Account, inv.account_id)
+    symbol = CURRENCY_SYMBOLS.get(acc.currency) if acc else ""
+    total = inv.amount + inv.iva_amount + inv.iibb_amount
+    return templates.TemplateResponse(
+        "invoice_detail.html",
+        {
+            "request": request,
+            "title": "Factura",
+            "header_title": "Detalle de factura",
+            "invoice": inv,
+            "account": acc,
+            "symbol": symbol,
+            "total": total,
+        },
     )
