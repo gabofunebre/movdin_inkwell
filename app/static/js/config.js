@@ -66,6 +66,7 @@ addBtn.addEventListener('click', async () => {
   alertBox.classList.add('d-none');
   colorInput.value = '#000000';
   colorBtn.style.color = '#000000';
+  form.is_billing.checked = false;
   modalTitle.textContent = 'Nueva cuenta';
   accModal.show();
 });
@@ -90,14 +91,24 @@ form.addEventListener('submit', async e => {
     currency: data.get('currency'),
     opening_balance: parseFloat(data.get('opening_balance') || '0'),
     is_active: true,
-    color: data.get('color') || '#000000'
+    color: data.get('color') || '#000000',
+    is_billing: form.is_billing.checked
   };
+  let replaceBilling = false;
+  if (payload.is_billing) {
+    const existing = accounts.find(a => a.is_billing && a.id !== parseInt(idField.value || '0', 10));
+    if (existing) {
+      const ok = confirm(`La cuenta "${existing.name}" ya es de facturación. ¿Reemplazarla?`);
+      if (!ok) return;
+      replaceBilling = true;
+    }
+  }
   showOverlay();
   let result;
   if (idField.value) {
-    result = await updateAccount(idField.value, payload);
+    result = await updateAccount(idField.value, payload, replaceBilling);
   } else {
-    result = await createAccount(payload);
+    result = await createAccount(payload, replaceBilling);
   }
   hideOverlay();
   alertBox.classList.remove('d-none', 'alert-success', 'alert-danger');
@@ -134,6 +145,7 @@ async function startEdit(acc) {
   const color = acc.color || '#000000';
   colorInput.value = color;
   colorBtn.style.color = color;
+  form.is_billing.checked = acc.is_billing;
   alertBox.classList.add('d-none');
   modalTitle.textContent = 'Editar cuenta';
   accModal.show();

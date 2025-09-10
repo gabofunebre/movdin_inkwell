@@ -19,13 +19,26 @@ router = APIRouter(prefix="/accounts")
 
 
 @router.post("", response_model=AccountOut)
-def create_account(payload: AccountIn, db: Session = Depends(get_db)):
+def create_account(
+    payload: AccountIn,
+    replace_billing: bool = False,
+    db: Session = Depends(get_db),
+):
     existing = db.scalar(select(Account).where(Account.name == payload.name))
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Account name already exists",
         )
+    if payload.is_billing:
+        current = db.scalar(select(Account).where(Account.is_billing == True))
+        if current:
+            if not replace_billing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Billing account already exists",
+                )
+            current.is_billing = False
     acc = Account(**payload.dict())
     db.add(acc)
     db.commit()
@@ -45,7 +58,12 @@ def list_accounts(
 
 
 @router.put("/{account_id}", response_model=AccountOut)
-def update_account(account_id: int, payload: AccountIn, db: Session = Depends(get_db)):
+def update_account(
+    account_id: int,
+    payload: AccountIn,
+    replace_billing: bool = False,
+    db: Session = Depends(get_db),
+):
     acc = db.get(Account, account_id)
     if not acc:
         raise HTTPException(
@@ -59,6 +77,17 @@ def update_account(account_id: int, payload: AccountIn, db: Session = Depends(ge
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Account name already exists",
         )
+    if payload.is_billing:
+        current = db.scalar(
+            select(Account).where(Account.is_billing == True, Account.id != account_id)
+        )
+        if current:
+            if not replace_billing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Billing account already exists",
+                )
+            current.is_billing = False
     for field, value in payload.dict().items():
         setattr(acc, field, value)
     db.commit()

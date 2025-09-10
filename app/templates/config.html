@@ -11,6 +11,7 @@
                 <tr>
                   <th class="text-center fw-bold">Nombre</th>
                   <th class="text-center fw-bold">Moneda</th>
+                  <th class="text-center fw-bold">Facturación</th>
                   <th class="text-center fw-bold">Acciones</th>
                 </tr>
               </thead>
@@ -69,6 +70,10 @@
                 <div class="mb-3 position-relative">
                   <button type="button" id="color-btn" class="btn btn-light border border-secondary rounded-pill px-4 fw-bold">Color</button>
                   <input type="color" name="color" id="color-input" class="position-fixed opacity-0" style="left: -9999px;" aria-label="Color">
+                </div>
+                <div class="form-check mb-3">
+                  <input class="form-check-input" type="checkbox" name="is_billing" id="is_billing">
+                  <label class="form-check-label" for="is_billing">Cuenta de facturación</label>
                 </div>
                 <div id="acc-alert" class="alert d-none" role="alert"></div>
               </div>

@@ -63,6 +63,8 @@ function openModal(type) {
   form.reset();
   document.getElementById('form-title').textContent = type === 'sale' ? 'Nueva Factura de Venta' : 'Nueva Factura de Compra';
   populateAccounts(form.account_id, accounts.filter(a => a.is_active));
+  const billing = accounts.find(a => a.is_billing);
+  if (billing) form.account_id.value = billing.id;
   form.dataset.type = type;
   alertBox.classList.add('d-none');
   const today = new Date().toISOString().split('T')[0];

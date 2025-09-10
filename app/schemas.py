@@ -10,6 +10,7 @@ class AccountIn(BaseModel):
     currency: Currency
     color: str = "#000000"
     is_active: bool = True
+    is_billing: bool = False
 
 class AccountOut(AccountIn):
     id: int

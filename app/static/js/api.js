@@ -48,8 +48,8 @@ export async function createInvoice(payload) {
   return { ok: false, error };
 }
 
-export async function createAccount(payload) {
-  const res = await fetch('/accounts', {
+export async function createAccount(payload, replaceBilling = false) {
+  const res = await fetch(`/accounts?replace_billing=${replaceBilling}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -66,8 +66,8 @@ export async function createAccount(payload) {
   return { ok: false, error };
 }
 
-export async function updateAccount(id, payload) {
-  const res = await fetch(`/accounts/${id}`, {
+export async function updateAccount(id, payload, replaceBilling = false) {
+  const res = await fetch(`/accounts/${id}?replace_billing=${replaceBilling}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
