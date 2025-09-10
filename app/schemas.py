@@ -44,8 +44,11 @@ class TransactionWithBalance(TransactionOut):
 class InvoiceCreate(BaseModel):
     account_id: int
     date: date
+    number: str
     description: str = ""
     amount: Decimal
+    iva_percent: Decimal = Decimal("21")
+    iibb_percent: Decimal = Decimal("3")
     type: InvoiceType
 
 
@@ -55,6 +58,11 @@ class InvoiceOut(BaseModel):
     date: date
     description: str
     amount: Decimal
+    number: str
+    iva_percent: Decimal
+    iva_amount: Decimal
+    iibb_percent: Decimal
+    iibb_amount: Decimal
     type: InvoiceType
 
     class Config:
