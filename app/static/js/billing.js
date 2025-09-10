@@ -16,7 +16,6 @@ const iibbPercentInput = form.iibb_percent;
 const iibbAmountInput = form.iibb_amount;
 const iibbRow = document.getElementById('iibb-row');
 const billingAccountLabel = document.getElementById('billing-account');
-
 let offset = 0;
 const limit = 50;
 let loading = false;
@@ -76,7 +75,6 @@ function recalcTaxes() {
   const iibbAmount = (amount + ivaAmount) * iibbPercent / 100;
   iibbAmountInput.value = iibbAmount.toFixed(2);
 }
-
 amountInput.addEventListener('input', recalcTaxes);
 ivaPercentInput.addEventListener('input', recalcTaxes);
 iibbPercentInput.addEventListener('input', recalcTaxes);
