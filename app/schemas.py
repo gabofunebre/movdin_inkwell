@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from pydantic import BaseModel
-from config.constants import Currency
+from config.constants import Currency, InvoiceType
 
 class AccountIn(BaseModel):
     name: str
@@ -38,6 +38,26 @@ class TransactionOut(BaseModel):
 
 class TransactionWithBalance(TransactionOut):
     running_balance: Decimal
+
+
+class InvoiceCreate(BaseModel):
+    account_id: int
+    date: date
+    description: str = ""
+    amount: Decimal
+    type: InvoiceType
+
+
+class InvoiceOut(BaseModel):
+    id: int
+    account_id: int
+    date: date
+    description: str
+    amount: Decimal
+    type: InvoiceType
+
+    class Config:
+        from_attributes = True
 
 
 class FrequentIn(BaseModel):

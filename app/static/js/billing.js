@@ -1,0 +1,156 @@
+import { fetchAccounts, fetchInvoices, createInvoice } from './api.js';
+import { renderTransaction, populateAccounts, showOverlay, hideOverlay } from './ui.js';
+
+const tbody = document.querySelector('#inv-table tbody');
+const container = document.getElementById('table-container');
+const modalEl = document.getElementById('invModal');
+const invModal = new bootstrap.Modal(modalEl);
+const form = document.getElementById('inv-form');
+const alertBox = document.getElementById('inv-alert');
+const searchBox = document.getElementById('search-box');
+const headers = document.querySelectorAll('#inv-table thead th.sortable');
+
+let offset = 0;
+const limit = 50;
+let loading = false;
+let accounts = [];
+let accountMap = {};
+let invoices = [];
+let sortColumn = 0;
+let sortAsc = false;
+
+function renderInvoices() {
+  const q = searchBox.value.trim().toLowerCase();
+  const filtered = invoices.filter(inv => {
+    const accName = accountMap[inv.account_id]?.name.toLowerCase() || '';
+    return inv.description.toLowerCase().includes(q) || accName.includes(q);
+  });
+  filtered.sort((a, b) => {
+    switch (sortColumn) {
+      case 0:
+        return sortAsc
+          ? new Date(a.date) - new Date(b.date)
+          : new Date(b.date) - new Date(a.date);
+      case 1:
+        return sortAsc
+          ? a.description.localeCompare(b.description)
+          : b.description.localeCompare(a.description);
+      case 2:
+        return sortAsc ? a.amount - b.amount : b.amount - a.amount;
+      case 3:
+        const accA = accountMap[a.account_id]?.name || '';
+        const accB = accountMap[b.account_id]?.name || '';
+        return sortAsc ? accA.localeCompare(accB) : accB.localeCompare(accA);
+      default:
+        return 0;
+    }
+  });
+  tbody.innerHTML = '';
+  filtered.forEach(inv => renderTransaction(tbody, inv, accountMap));
+}
+
+async function loadMore() {
+  if (loading) return;
+  loading = true;
+  const data = await fetchInvoices(limit, offset);
+  invoices = invoices.concat(data);
+  offset += data.length;
+  renderInvoices();
+  loading = false;
+}
+
+function openModal(type) {
+  form.reset();
+  document.getElementById('form-title').textContent = type === 'sale' ? 'Nueva Factura de Venta' : 'Nueva Factura de Compra';
+  populateAccounts(form.account_id, accounts.filter(a => a.is_active));
+  form.dataset.type = type;
+  alertBox.classList.add('d-none');
+  const today = new Date().toISOString().split('T')[0];
+  form.date.max = today;
+  form.date.value = today;
+  invModal.show();
+}
+
+document.getElementById('add-sale').addEventListener('click', () => openModal('sale'));
+document.getElementById('add-purchase').addEventListener('click', () => openModal('purchase'));
+searchBox.addEventListener('input', renderInvoices);
+
+headers.forEach((th, index) => {
+  th.addEventListener('click', () => {
+    if (sortColumn === index) {
+      sortAsc = !sortAsc;
+    } else {
+      sortColumn = index;
+      sortAsc = true;
+    }
+    updateSortIcons();
+    renderInvoices();
+  });
+});
+
+function updateSortIcons() {
+  headers.forEach((th, index) => {
+    const icon = th.querySelector('.sort-icon');
+    if (!icon) return;
+    icon.classList.remove('bi-arrow-up', 'bi-arrow-down', 'bi-arrow-down-up');
+    if (index === sortColumn) {
+      icon.classList.add(sortAsc ? 'bi-arrow-up' : 'bi-arrow-down');
+    } else {
+      icon.classList.add('bi-arrow-down-up');
+    }
+  });
+}
+
+container.addEventListener('scroll', () => {
+  if (container.scrollTop + container.clientHeight >= container.scrollHeight - 10) {
+    loadMore();
+  }
+});
+
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!form.reportValidity()) return;
+  const data = new FormData(form);
+  let amount = parseFloat(data.get('amount'));
+  amount = form.dataset.type === 'purchase' ? -Math.abs(amount) : Math.abs(amount);
+  const payload = {
+    date: data.get('date'),
+    description: data.get('description'),
+    amount,
+    account_id: parseInt(data.get('account_id'), 10),
+    type: form.dataset.type
+  };
+  const today = new Date().toISOString().split('T')[0];
+  if (payload.date > today) {
+    alertBox.classList.remove('d-none', 'alert-success', 'alert-danger');
+    alertBox.classList.add('alert-danger');
+    alertBox.textContent = 'La fecha no puede ser futura';
+    return;
+  }
+
+  showOverlay();
+  const result = await createInvoice(payload);
+  hideOverlay();
+  alertBox.classList.remove('d-none', 'alert-success', 'alert-danger');
+  if (result.ok) {
+    alertBox.classList.add('alert-success');
+    alertBox.textContent = 'Factura guardada';
+    invoices = [];
+    offset = 0;
+    await loadMore();
+    setTimeout(() => {
+      invModal.hide();
+      alertBox.classList.add('d-none');
+    }, 1000);
+  } else {
+    alertBox.classList.add('alert-danger');
+    alertBox.textContent = result.error || 'Error al guardar';
+  }
+});
+
+(async function init() {
+  accounts = await fetchAccounts(true);
+  accountMap = Object.fromEntries(accounts.map(a => [a.id, a]));
+  await loadMore();
+  updateSortIcons();
+})();

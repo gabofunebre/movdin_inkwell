@@ -8,6 +8,11 @@ export async function fetchTransactions(limit, offset) {
   return res.json();
 }
 
+export async function fetchInvoices(limit, offset) {
+  const res = await fetch(`/invoices?limit=${limit}&offset=${offset}`);
+  return res.json();
+}
+
 export async function fetchAccountBalances() {
   const res = await fetch('/accounts/balances');
   return res.json();
@@ -15,6 +20,21 @@ export async function fetchAccountBalances() {
 
 export async function createTransaction(payload) {
   const res = await fetch('/transactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) return { ok: true };
+  let error = 'Error al guardar';
+  try {
+    const data = await res.json();
+    error = data.detail || error;
+  } catch (_) {}
+  return { ok: false, error };
+}
+
+export async function createInvoice(payload) {
+  const res = await fetch('/invoices', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)

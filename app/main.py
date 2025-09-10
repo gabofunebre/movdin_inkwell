@@ -9,6 +9,7 @@ from routes.accounts import router as accounts_router
 from routes.health import router as health_router
 from routes.transactions import router as transactions_router
 from routes.frequents import router as frequents_router
+from routes.invoices import router as invoices_router
 
 app = FastAPI(title="Movimientos")
 
@@ -23,6 +24,7 @@ app.include_router(health_router)
 app.include_router(accounts_router)
 app.include_router(transactions_router)
 app.include_router(frequents_router)
+app.include_router(invoices_router)
 
 app.mount(
     "/static",
@@ -56,4 +58,12 @@ async def totals(request: Request):
     return templates.TemplateResponse(
         "totals.html",
         {"request": request, "title": "Totales", "header_title": "Totales"},
+    )
+
+
+@app.get("/billing.html", response_class=HTMLResponse)
+async def billing(request: Request):
+    return templates.TemplateResponse(
+        "billing.html",
+        {"request": request, "title": "Facturación", "header_title": "Facturación"},
     )
