@@ -6,15 +6,13 @@ from sqlalchemy import and_, bindparam, func, select
 from sqlalchemy.orm import Session
 
 from config.db import get_db
-from models import Account, Transaction, Tax
+from models import Account, Transaction
 from schemas import (
     AccountBalance,
     AccountIn,
     AccountOut,
     BalanceOut,
     TransactionWithBalance,
-    AccountTaxUpdate,
-    TaxOut,
 )
 
 router = APIRouter(prefix="/accounts")
@@ -78,30 +76,6 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
     acc.is_active = False
     db.commit()
     return {"ok": True}
-
-
-@router.get("/{account_id}/taxes", response_model=List[TaxOut])
-def get_account_taxes(account_id: int, db: Session = Depends(get_db)):
-    acc = db.get(Account, account_id)
-    if not acc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Account not found"
-        )
-    return acc.taxes
-
-
-@router.put("/{account_id}/taxes", response_model=List[TaxOut])
-def set_account_taxes(account_id: int, payload: AccountTaxUpdate, db: Session = Depends(get_db)):
-    acc = db.get(Account, account_id)
-    if not acc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Account not found"
-        )
-    taxes = db.scalars(select(Tax).where(Tax.id.in_(payload.tax_ids))).all()
-    acc.taxes = taxes
-    db.commit()
-    db.refresh(acc)
-    return acc.taxes
 
 
 @router.get("/balances", response_model=List[AccountBalance])
