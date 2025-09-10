@@ -14,6 +14,7 @@ const ivaPercentInput = form.iva_percent;
 const ivaAmountInput = form.iva_amount;
 const iibbPercentInput = form.iibb_percent;
 const iibbAmountInput = form.iibb_amount;
+const iibbRow = document.getElementById('iibb-row');
 const billingAccountLabel = document.getElementById('billing-account');
 let offset = 0;
 const limit = 50;
@@ -99,6 +100,11 @@ function openModal(type) {
   const today = new Date().toISOString().split('T')[0];
   form.date.max = today;
   form.date.value = today;
+  const isPurchase = type === 'purchase';
+  iibbRow.classList.toggle('d-none', isPurchase);
+  iibbPercentInput.disabled = isPurchase;
+  iibbAmountInput.disabled = isPurchase;
+  iibbPercentInput.value = isPurchase ? 0 : 3;
   recalcTaxes();
   invModal.show();
 }
