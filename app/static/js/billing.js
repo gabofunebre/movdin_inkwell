@@ -9,6 +9,11 @@ const form = document.getElementById('inv-form');
 const alertBox = document.getElementById('inv-alert');
 const searchBox = document.getElementById('search-box');
 const headers = document.querySelectorAll('#inv-table thead th.sortable');
+const amountInput = form.amount;
+const ivaPercentInput = form.iva_percent;
+const ivaAmountInput = form.iva_amount;
+const iibbPercentInput = form.iibb_percent;
+const iibbAmountInput = form.iibb_amount;
 
 let offset = 0;
 const limit = 50;
@@ -23,7 +28,11 @@ function renderInvoices() {
   const q = searchBox.value.trim().toLowerCase();
   const filtered = invoices.filter(inv => {
     const accName = accountMap[inv.account_id]?.name.toLowerCase() || '';
-    return inv.description.toLowerCase().includes(q) || accName.includes(q);
+    return (
+      inv.description.toLowerCase().includes(q) ||
+      (inv.number || '').toLowerCase().includes(q) ||
+      accName.includes(q)
+    );
   });
   filtered.sort((a, b) => {
     switch (sortColumn) {
@@ -49,6 +58,20 @@ function renderInvoices() {
   filtered.forEach(inv => renderTransaction(tbody, inv, accountMap));
 }
 
+function recalcTaxes() {
+  const amount = parseFloat(amountInput.value) || 0;
+  const ivaPercent = parseFloat(ivaPercentInput.value) || 0;
+  const ivaAmount = amount * ivaPercent / 100;
+  ivaAmountInput.value = ivaAmount.toFixed(2);
+  const iibbPercent = parseFloat(iibbPercentInput.value) || 0;
+  const iibbAmount = (amount + ivaAmount) * iibbPercent / 100;
+  iibbAmountInput.value = iibbAmount.toFixed(2);
+}
+
+amountInput.addEventListener('input', recalcTaxes);
+ivaPercentInput.addEventListener('input', recalcTaxes);
+iibbPercentInput.addEventListener('input', recalcTaxes);
+
 async function loadMore() {
   if (loading) return;
   loading = true;
@@ -70,6 +93,7 @@ function openModal(type) {
   const today = new Date().toISOString().split('T')[0];
   form.date.max = today;
   form.date.value = today;
+  recalcTaxes();
   invModal.show();
 }
 
@@ -117,10 +141,13 @@ form.addEventListener('submit', async e => {
   amount = form.dataset.type === 'purchase' ? -Math.abs(amount) : Math.abs(amount);
   const payload = {
     date: data.get('date'),
+    number: data.get('number'),
     description: data.get('description'),
     amount,
     account_id: parseInt(data.get('account_id'), 10),
-    type: form.dataset.type
+    type: form.dataset.type,
+    iva_percent: parseFloat(data.get('iva_percent')) || 0,
+    iibb_percent: parseFloat(data.get('iibb_percent')) || 0
   };
   const today = new Date().toISOString().split('T')[0];
   if (payload.date > today) {

@@ -65,7 +65,12 @@ class Invoice(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     date: Mapped[date] = mapped_column(Date, nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
+    number: Mapped[str] = mapped_column(String(50), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    iva_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=21)
+    iva_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    iibb_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=3)
+    iibb_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     type: Mapped[InvoiceType] = mapped_column(SqlEnum(InvoiceType), nullable=False)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(

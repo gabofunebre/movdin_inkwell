@@ -21,9 +21,10 @@ export function renderTransaction(tbody, tx, accountMap) {
   const descStyle = isIncome ? '' : ' style="padding-left:2em"';
   const amountClass = isIncome ? 'text-start' : 'text-end';
   const amountColor = isIncome ? 'rgb(40,150,20)' : 'rgb(170,10,10)';
+  const concept = tx.number ? `${tx.number} - ${tx.description}` : tx.description;
   tr.innerHTML =
     `<td class="text-center">${formattedDate}</td>` +
-    `<td class="${descClass}"${descStyle}>${tx.description}</td>` +
+    `<td class="${descClass}"${descStyle}>${concept}</td>` +
     `<td class="${amountClass}" style="color:${amountColor}">${symbol} ${amount}</td>` +
     `<td class="text-center" style="color:${accColor}">${accName}</td>`;
   tr.addEventListener('click', () => {
