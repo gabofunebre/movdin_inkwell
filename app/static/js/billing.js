@@ -15,7 +15,6 @@ const ivaAmountInput = form.iva_amount;
 const iibbPercentInput = form.iibb_percent;
 const iibbAmountInput = form.iibb_amount;
 const billingAccountLabel = document.getElementById('billing-account');
-
 let offset = 0;
 const limit = 50;
 let loading = false;
