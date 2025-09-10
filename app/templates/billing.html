@@ -41,19 +41,48 @@
               </label>
             </div>
             <div class="mb-3">
+              <label class="form-label">Número
+                <input type="text" name="number" class="form-control" required>
+              </label>
+            </div>
+            <div class="mb-3">
               <label class="form-label">Concepto
                 <input type="text" name="description" class="form-control" required>
               </label>
             </div>
             <div class="mb-3">
-              <label class="form-label">Monto
+              <label class="form-label">Total sin impuesto
                 <input type="number" step="0.01" name="amount" class="form-control" required>
               </label>
             </div>
+            <div class="row">
+              <div class="col-6 mb-3">
+                <label class="form-label">IVA %
+                  <input type="number" step="0.01" name="iva_percent" class="form-control" value="21">
+                </label>
+              </div>
+              <div class="col-6 mb-3">
+                <label class="form-label">IVA $
+                  <input type="number" step="0.01" name="iva_amount" class="form-control" readonly>
+                </label>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-6 mb-3">
+                <label class="form-label">IIBB %
+                  <input type="number" step="0.01" name="iibb_percent" class="form-control" value="3">
+                </label>
+              </div>
+              <div class="col-6 mb-3">
+                <label class="form-label">IIBB $
+                  <input type="number" step="0.01" name="iibb_amount" class="form-control" readonly>
+                </label>
+              </div>
+            </div>
             <div class="mb-3">
-              <label class="form-label">Cuenta
-                <select name="account_id" class="form-select" required></select>
-              </label>
+              <span class="form-label d-block">Cuenta de facturación:</span>
+              <span id="billing-account" class="fw-bold"></span>
+              <input type="hidden" name="account_id">
             </div>
             <div id="inv-alert" class="alert d-none" role="alert"></div>
           </div>
