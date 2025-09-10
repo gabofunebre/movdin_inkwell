@@ -1,5 +1,5 @@
 import { fetchAccounts, fetchInvoices, createInvoice } from './api.js';
-import { renderTransaction, populateAccounts, showOverlay, hideOverlay } from './ui.js';
+import { renderInvoice, showOverlay, hideOverlay } from './ui.js';
 
 const tbody = document.querySelector('#inv-table tbody');
 const container = document.getElementById('table-container');
@@ -9,45 +9,77 @@ const form = document.getElementById('inv-form');
 const alertBox = document.getElementById('inv-alert');
 const searchBox = document.getElementById('search-box');
 const headers = document.querySelectorAll('#inv-table thead th.sortable');
+const amountInput = form.amount;
+const ivaPercentInput = form.iva_percent;
+const ivaAmountInput = form.iva_amount;
+const iibbPercentInput = form.iibb_percent;
+const iibbAmountInput = form.iibb_amount;
+const iibbRow = document.getElementById('iibb-row');
+const billingAccountLabel = document.getElementById('billing-account');
 
 let offset = 0;
 const limit = 50;
 let loading = false;
 let accounts = [];
 let accountMap = {};
+let billingAccount = null;
 let invoices = [];
-let sortColumn = 0;
+let sortColumn = 1;
 let sortAsc = false;
 
 function renderInvoices() {
   const q = searchBox.value.trim().toLowerCase();
   const filtered = invoices.filter(inv => {
-    const accName = accountMap[inv.account_id]?.name.toLowerCase() || '';
-    return inv.description.toLowerCase().includes(q) || accName.includes(q);
+    const typeText = inv.type === 'sale' ? 'venta' : 'compra';
+    return (
+      inv.description.toLowerCase().includes(q) ||
+      (inv.number || '').toLowerCase().includes(q) ||
+      typeText.includes(q)
+    );
   });
   filtered.sort((a, b) => {
     switch (sortColumn) {
       case 0:
         return sortAsc
+          ? (a.number || '').localeCompare(b.number || '')
+          : (b.number || '').localeCompare(a.number || '');
+      case 1:
+        return sortAsc
           ? new Date(a.date) - new Date(b.date)
           : new Date(b.date) - new Date(a.date);
-      case 1:
+      case 2:
+        return sortAsc
+          ? a.type.localeCompare(b.type)
+          : b.type.localeCompare(a.type);
+      case 3:
         return sortAsc
           ? a.description.localeCompare(b.description)
           : b.description.localeCompare(a.description);
-      case 2:
-        return sortAsc ? a.amount - b.amount : b.amount - a.amount;
-      case 3:
-        const accA = accountMap[a.account_id]?.name || '';
-        const accB = accountMap[b.account_id]?.name || '';
-        return sortAsc ? accA.localeCompare(accB) : accB.localeCompare(accA);
+      case 4:
+        const totalA = Number(a.amount) + Number(a.iva_amount);
+        const totalB = Number(b.amount) + Number(b.iva_amount);
+        return sortAsc ? totalA - totalB : totalB - totalA;
       default:
         return 0;
     }
   });
   tbody.innerHTML = '';
-  filtered.forEach(inv => renderTransaction(tbody, inv, accountMap));
+  filtered.forEach(inv => renderInvoice(tbody, inv, accountMap));
 }
+
+function recalcTaxes() {
+  const amount = parseFloat(amountInput.value) || 0;
+  const ivaPercent = parseFloat(ivaPercentInput.value) || 0;
+  const ivaAmount = amount * ivaPercent / 100;
+  ivaAmountInput.value = ivaAmount.toFixed(2);
+  const iibbPercent = parseFloat(iibbPercentInput.value) || 0;
+  const iibbAmount = (amount + ivaAmount) * iibbPercent / 100;
+  iibbAmountInput.value = iibbAmount.toFixed(2);
+}
+
+amountInput.addEventListener('input', recalcTaxes);
+ivaPercentInput.addEventListener('input', recalcTaxes);
+iibbPercentInput.addEventListener('input', recalcTaxes);
 
 async function loadMore() {
   if (loading) return;
@@ -60,16 +92,27 @@ async function loadMore() {
 }
 
 function openModal(type) {
+  if (!billingAccount) {
+    alert('Se requiere una cuenta de facturación');
+    return;
+  }
   form.reset();
-  document.getElementById('form-title').textContent = type === 'sale' ? 'Nueva Factura de Venta' : 'Nueva Factura de Compra';
-  populateAccounts(form.account_id, accounts.filter(a => a.is_active));
-  const billing = accounts.find(a => a.is_billing);
-  if (billing) form.account_id.value = billing.id;
+  document.getElementById('form-title').textContent =
+    type === 'sale' ? 'Nueva Factura de Venta' : 'Nueva Factura de Compra';
+  form.account_id.value = billingAccount.id;
+  billingAccountLabel.textContent = billingAccount.name;
+  billingAccountLabel.style.color = billingAccount.color;
   form.dataset.type = type;
   alertBox.classList.add('d-none');
   const today = new Date().toISOString().split('T')[0];
   form.date.max = today;
   form.date.value = today;
+  const isPurchase = type === 'purchase';
+  iibbRow.classList.toggle('d-none', isPurchase);
+  iibbPercentInput.disabled = isPurchase;
+  iibbAmountInput.disabled = isPurchase;
+  iibbPercentInput.value = isPurchase ? 0 : 3;
+  recalcTaxes();
   invModal.show();
 }
 
@@ -117,10 +160,13 @@ form.addEventListener('submit', async e => {
   amount = form.dataset.type === 'purchase' ? -Math.abs(amount) : Math.abs(amount);
   const payload = {
     date: data.get('date'),
+    number: data.get('number'),
     description: data.get('description'),
     amount,
-    account_id: parseInt(data.get('account_id'), 10),
-    type: form.dataset.type
+    account_id: billingAccount.id,
+    type: form.dataset.type,
+    iva_percent: parseFloat(data.get('iva_percent')) || 0,
+    iibb_percent: parseFloat(data.get('iibb_percent')) || 0
   };
   const today = new Date().toISOString().split('T')[0];
   if (payload.date > today) {
@@ -153,6 +199,7 @@ form.addEventListener('submit', async e => {
 (async function init() {
   accounts = await fetchAccounts(true);
   accountMap = Object.fromEntries(accounts.map(a => [a.id, a]));
+  billingAccount = accounts.find(a => a.is_billing);
   await loadMore();
   updateSortIcons();
 })();
