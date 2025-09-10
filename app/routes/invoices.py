@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from config.db import get_db
+from config.constants import InvoiceType
 from models import Invoice
 from schemas import InvoiceCreate, InvoiceOut
 
@@ -19,7 +21,30 @@ def create_invoice(payload: InvoiceCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se permiten fechas futuras",
         )
-    inv = Invoice(**payload.dict())
+    iva_amount = (payload.amount * payload.iva_percent / Decimal("100")).quantize(
+        Decimal("0.01")
+    )
+    if payload.type == InvoiceType.SALE:
+        iibb_base = payload.amount + iva_amount
+        iibb_percent = payload.iibb_percent
+        iibb_amount = (iibb_base * iibb_percent / Decimal("100")).quantize(
+            Decimal("0.01")
+        )
+    else:
+        iibb_percent = Decimal("0")
+        iibb_amount = Decimal("0")
+    inv = Invoice(
+        account_id=payload.account_id,
+        date=payload.date,
+        description=payload.description,
+        number=payload.number,
+        amount=payload.amount,
+        iva_percent=payload.iva_percent,
+        iva_amount=iva_amount,
+        iibb_percent=iibb_percent,
+        iibb_amount=iibb_amount,
+        type=payload.type,
+    )
     db.add(inv)
     db.commit()
     db.refresh(inv)
