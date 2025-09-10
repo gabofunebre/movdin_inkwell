@@ -43,7 +43,11 @@ export async function createInvoice(payload) {
   let error = 'Error al guardar';
   try {
     const data = await res.json();
-    error = data.detail || error;
+    if (Array.isArray(data.detail)) {
+      error = data.detail.map(d => d.msg).join(', ');
+    } else {
+      error = data.detail || error;
+    }
   } catch (_) {}
   return { ok: false, error };
 }

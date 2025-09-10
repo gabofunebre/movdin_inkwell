@@ -1,5 +1,5 @@
 import { fetchAccounts, fetchInvoices, createInvoice } from './api.js';
-import { renderTransaction, populateAccounts, showOverlay, hideOverlay } from './ui.js';
+import { renderTransaction, showOverlay, hideOverlay } from './ui.js';
 
 const tbody = document.querySelector('#inv-table tbody');
 const container = document.getElementById('table-container');
@@ -14,12 +14,13 @@ const ivaPercentInput = form.iva_percent;
 const ivaAmountInput = form.iva_amount;
 const iibbPercentInput = form.iibb_percent;
 const iibbAmountInput = form.iibb_amount;
-
+const billingAccountLabel = document.getElementById('billing-account');
 let offset = 0;
 const limit = 50;
 let loading = false;
 let accounts = [];
 let accountMap = {};
+let billingAccount = null;
 let invoices = [];
 let sortColumn = 0;
 let sortAsc = false;
@@ -83,11 +84,16 @@ async function loadMore() {
 }
 
 function openModal(type) {
+  if (!billingAccount) {
+    alert('Se requiere una cuenta de facturación');
+    return;
+  }
   form.reset();
-  document.getElementById('form-title').textContent = type === 'sale' ? 'Nueva Factura de Venta' : 'Nueva Factura de Compra';
-  populateAccounts(form.account_id, accounts.filter(a => a.is_active));
-  const billing = accounts.find(a => a.is_billing);
-  if (billing) form.account_id.value = billing.id;
+  document.getElementById('form-title').textContent =
+    type === 'sale' ? 'Nueva Factura de Venta' : 'Nueva Factura de Compra';
+  form.account_id.value = billingAccount.id;
+  billingAccountLabel.textContent = billingAccount.name;
+  billingAccountLabel.style.color = billingAccount.color;
   form.dataset.type = type;
   alertBox.classList.add('d-none');
   const today = new Date().toISOString().split('T')[0];
@@ -144,7 +150,7 @@ form.addEventListener('submit', async e => {
     number: data.get('number'),
     description: data.get('description'),
     amount,
-    account_id: parseInt(data.get('account_id'), 10),
+    account_id: billingAccount.id,
     type: form.dataset.type,
     iva_percent: parseFloat(data.get('iva_percent')) || 0,
     iibb_percent: parseFloat(data.get('iibb_percent')) || 0
@@ -180,6 +186,7 @@ form.addEventListener('submit', async e => {
 (async function init() {
   accounts = await fetchAccounts(true);
   accountMap = Object.fromEntries(accounts.map(a => [a.id, a]));
+  billingAccount = accounts.find(a => a.is_billing);
   await loadMore();
   updateSortIcons();
 })();
