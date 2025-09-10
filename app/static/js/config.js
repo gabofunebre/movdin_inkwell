@@ -15,7 +15,6 @@ import {
   hideOverlay
 } from './ui.js';
 import { CURRENCIES } from './constants.js';
-
 document.addEventListener('DOMContentLoaded', () => {
   const tbody = document.querySelector('#account-table tbody');
   const modalEl = document.getElementById('accountModal');
@@ -115,6 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
       alertBox.classList.add('alert-danger');
       alertBox.textContent = result.error || 'Error al guardar';
     }
+
   });
 
   async function loadAccounts() {
@@ -212,7 +212,6 @@ document.addEventListener('DOMContentLoaded', () => {
     freqModalTitle.textContent = 'Editar transacción frecuente';
     freqModal.show();
   }
-
   async function removeFreq(freq) {
     freqToDelete = freq;
     freqConfirmMessage.textContent = `¿Eliminar transacción frecuente "${freq.description}"?`;
@@ -236,3 +235,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loadAccounts().then(() => loadFrequents());
 });
+
