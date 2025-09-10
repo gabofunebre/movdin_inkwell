@@ -8,7 +8,6 @@ from config.db import init_db
 from routes.accounts import router as accounts_router
 from routes.health import router as health_router
 from routes.transactions import router as transactions_router
-from routes.taxes import router as taxes_router
 from routes.frequents import router as frequents_router
 
 app = FastAPI(title="Movimientos")
@@ -23,7 +22,6 @@ def on_startup() -> None:
 app.include_router(health_router)
 app.include_router(accounts_router)
 app.include_router(transactions_router)
-app.include_router(taxes_router)
 app.include_router(frequents_router)
 
 app.mount(

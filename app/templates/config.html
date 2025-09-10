@@ -11,7 +11,6 @@
                 <tr>
                   <th class="text-center fw-bold">Nombre</th>
                   <th class="text-center fw-bold">Moneda</th>
-                  <th class="text-center fw-bold">Tax</th>
                   <th class="text-center fw-bold">Acciones</th>
                 </tr>
               </thead>
@@ -19,24 +18,6 @@
             </table>
           </div>
           <button id="add-account" class="btn btn-primary mt-2 shadow-sm d-block mx-auto">Agregar cuenta</button>
-        </div>
-      </section>
-      <section class="col-12 col-lg-6">
-        <div class="p-3 border rounded">
-          <h2 class="mb-3">Impuestos</h2>
-          <div class="table-responsive">
-            <table id="tax-table" class="table table-striped table-borderless mb-0 shadow-sm">
-              <thead class="table-secondary">
-                <tr>
-                  <th class="text-center fw-bold">Nombre</th>
-                  <th class="text-center fw-bold">Monto %</th>
-                  <th class="text-center fw-bold">Acciones</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <button id="add-tax" class="btn btn-primary mt-2 shadow-sm d-block mx-auto">Agregar impuesto</button>
         </div>
       </section>
       <section class="col-12 col-lg-6">
@@ -69,7 +50,7 @@
           <div class="modal-body">
             <input type="hidden" name="id">
             <div class="row">
-              <div class="col-md-6">
+              <div class="col-md-12">
                 <div class="mb-3">
                   <label class="form-label">Nombre
                     <input type="text" name="name" class="form-control" required>
@@ -90,13 +71,6 @@
                   <input type="color" name="color" id="color-input" class="position-fixed opacity-0" style="left: -9999px;" aria-label="Color">
                 </div>
                 <div id="acc-alert" class="alert d-none" role="alert"></div>
-              </div>
-              <div class="col-md-6">
-                <div class="border rounded p-2">
-                  <h6>Asociar impuesto</h6>
-                  <div id="tax-assoc-list" class="mt-2"></div>
-                  <button type="button" id="assoc-tax-btn" class="btn mt-2 text-dark" style="background-color:#f8c2dc;">Asociar</button>
-                </div>
               </div>
             </div>
           </div>
@@ -120,53 +94,6 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-danger" id="confirm-yes">Eliminar</button>
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="modal fade" id="taxModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <form id="tax-form">
-          <div class="modal-header">
-            <h5 class="modal-title">Nuevo impuesto</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <input type="hidden" name="id">
-            <div class="mb-3">
-              <label class="form-label">Nombre
-                <input type="text" name="name" class="form-control" required>
-              </label>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Monto %
-                <input type="number" step="0.01" name="rate" class="form-control" required>
-              </label>
-            </div>
-            <div id="tax-alert" class="alert d-none" role="alert"></div>
-          </div>
-          <div class="modal-footer">
-            <button type="submit" class="btn btn-primary">Guardar</button>
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-  <div class="modal fade" id="confirmTaxModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Confirmación</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <p id="confirm-tax-message"></p>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-danger" id="confirm-tax-yes">Eliminar</button>
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
         </div>
       </div>

@@ -1,6 +1,5 @@
 from datetime import date
 from decimal import Decimal
-from typing import List
 
 from pydantic import BaseModel
 from config.constants import Currency
@@ -16,21 +15,6 @@ class AccountOut(AccountIn):
     id: int
     class Config:
         from_attributes = True
-
-
-class TaxIn(BaseModel):
-    name: str
-    rate: Decimal
-
-
-class TaxOut(TaxIn):
-    id: int
-    class Config:
-        from_attributes = True
-
-
-class AccountTaxUpdate(BaseModel):
-    tax_ids: List[int]
 
 class TransactionCreate(BaseModel):
     account_id: int

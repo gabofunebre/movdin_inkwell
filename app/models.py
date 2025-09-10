@@ -14,21 +14,11 @@ from sqlalchemy import (
     Enum as SqlEnum,
     Index,
     CheckConstraint,
-    Table,
-    Column,
 )
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from config.db import Base
 from config.constants import Currency
-
-
-account_tax_table = Table(
-    "account_taxes",
-    Base.metadata,
-    Column("account_id", ForeignKey("accounts.id"), primary_key=True),
-    Column("tax_id", ForeignKey("taxes.id"), primary_key=True),
-)
 
 class Account(Base):
     __tablename__ = "accounts"
@@ -43,7 +33,6 @@ class Account(Base):
     )
 
     transactions = relationship("Transaction", back_populates="account")
-    taxes = relationship("Tax", secondary=account_tax_table, back_populates="accounts")
 
 
 class Transaction(Base):
@@ -73,9 +62,3 @@ class FrequentTransaction(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-class Tax(Base):
-    __tablename__ = "taxes"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
-    rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
-    accounts = relationship("Account", secondary=account_tax_table, back_populates="taxes")
