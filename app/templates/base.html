@@ -13,7 +13,7 @@
     <button id="menu-button" class="navbar-toggler position-absolute p-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#sideMenu" aria-controls="sideMenu">
       <span class="navbar-toggler-icon"></span>
     </button>
-    <h1 class="h3 m-0">{{ header_title }}</h1>
+    <h1 class="h3 m-0">{{ header_title|safe }}</h1>
     <a href="/" id="logo-link" class="position-absolute">
       <img src="/static/images/logo_sqr.png" alt="Logo">
     </a>
