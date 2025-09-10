@@ -50,6 +50,7 @@ export function renderAccount(tbody, account, onEdit, onDelete) {
   tr.innerHTML =
     `<td style="color:${nameColor}">${account.name}</td>` +
     `<td>${account.currency}</td>` +
+    `<td>${account.is_billing ? '<i class="bi bi-star-fill text-warning"></i>' : ''}</td>` +
     `<td class="text-nowrap">` +
     `<button class="btn btn-sm btn-outline-secondary me-2" title="Editar"><i class="bi bi-pencil"></i></button>` +
     `<button class="btn btn-sm btn-outline-danger" title="Eliminar"><i class="bi bi-x"></i></button>` +

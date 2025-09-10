@@ -8,6 +8,11 @@ export async function fetchTransactions(limit, offset) {
   return res.json();
 }
 
+export async function fetchInvoices(limit, offset) {
+  const res = await fetch(`/invoices?limit=${limit}&offset=${offset}`);
+  return res.json();
+}
+
 export async function fetchAccountBalances() {
   const res = await fetch('/accounts/balances');
   return res.json();
@@ -28,8 +33,23 @@ export async function createTransaction(payload) {
   return { ok: false, error };
 }
 
-export async function createAccount(payload) {
-  const res = await fetch('/accounts', {
+export async function createInvoice(payload) {
+  const res = await fetch('/invoices', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) return { ok: true };
+  let error = 'Error al guardar';
+  try {
+    const data = await res.json();
+    error = data.detail || error;
+  } catch (_) {}
+  return { ok: false, error };
+}
+
+export async function createAccount(payload, replaceBilling = false) {
+  const res = await fetch(`/accounts?replace_billing=${replaceBilling}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -46,8 +66,8 @@ export async function createAccount(payload) {
   return { ok: false, error };
 }
 
-export async function updateAccount(id, payload) {
-  const res = await fetch(`/accounts/${id}`, {
+export async function updateAccount(id, payload, replaceBilling = false) {
+  const res = await fetch(`/accounts/${id}?replace_billing=${replaceBilling}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
