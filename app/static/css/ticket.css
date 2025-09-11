@@ -1,0 +1,38 @@
+.ticket {
+  width: 300px;
+  padding: 10px;
+  border: 1px dashed #000;
+  font-family: "Courier New", monospace;
+}
+
+.ticket h2 {
+  text-align: center;
+  margin-bottom: 10px;
+  font-size: 1.2rem;
+}
+
+.ticket table {
+  width: 100%;
+  font-size: 0.9rem;
+}
+
+.ticket th,
+.ticket td {
+  padding: 2px 0;
+}
+
+.ticket tr.total th,
+.ticket tr.total td {
+  border-top: 1px dashed #000;
+  font-weight: bold;
+}
+
+@media print {
+  body {
+    width: 80mm;
+  }
+  .ticket {
+    width: 100%;
+    border: none;
+  }
+}
