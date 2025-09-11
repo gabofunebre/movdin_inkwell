@@ -1,4 +1,4 @@
-import { fetchAccountBalances, fetchAccountSummary } from './api.js';
+import { fetchAccountBalances, fetchAccountSummary } from './api.js?v=1';
 import { showOverlay, hideOverlay } from './ui.js';
 import { CURRENCY_SYMBOLS } from './constants.js';
 

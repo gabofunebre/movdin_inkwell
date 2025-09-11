@@ -1,4 +1,4 @@
-import { fetchAccounts, fetchTransactions, createTransaction, fetchFrequents } from './api.js';
+import { fetchAccounts, fetchTransactions, createTransaction, fetchFrequents } from './api.js?v=1';
 import { renderTransaction, populateAccounts, showOverlay, hideOverlay } from './ui.js';
 
 const tbody = document.querySelector('#tx-table tbody');
