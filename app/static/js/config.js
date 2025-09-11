@@ -12,8 +12,8 @@ import {
   renderAccount,
   renderFrequent,
   showOverlay,
-  hideOverlay
-} from './ui.js';
+  hideOverlay,
+} from './ui.js?v=1';
 import { CURRENCIES } from './constants.js';
 
 const tbody = document.querySelector('#account-table tbody');

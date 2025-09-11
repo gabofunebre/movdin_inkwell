@@ -1,5 +1,10 @@
 import { fetchAccounts, fetchTransactions, createTransaction, fetchFrequents } from './api.js?v=1';
-import { renderTransaction, populateAccounts, showOverlay, hideOverlay } from './ui.js';
+import {
+  renderTransaction,
+  populateAccounts,
+  showOverlay,
+  hideOverlay,
+} from './ui.js?v=1';
 
 const tbody = document.querySelector('#tx-table tbody');
 const container = document.getElementById('table-container');

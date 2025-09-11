@@ -1,5 +1,10 @@
 import { fetchAccounts, fetchInvoices, createInvoice } from './api.js?v=1';
-import { renderInvoice, showOverlay, hideOverlay, formatCurrency } from './ui.js';
+import {
+  renderInvoice,
+  showOverlay,
+  hideOverlay,
+  formatCurrency,
+} from './ui.js?v=1';
 
 const tbody = document.querySelector('#inv-table tbody');
 const container = document.getElementById('table-container');
