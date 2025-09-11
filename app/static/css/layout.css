@@ -63,6 +63,62 @@ body {
   border: none;
 }
 
+#inv-table-wrapper {
+  border: 1px solid #d0d0d0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+#inv-table {
+  width: 100%;
+  table-layout: fixed;
+  border: none;
+  font-size: calc(1rem + 2pt);
+  --bs-table-striped-bg: #f0f8ff;
+  --bs-table-bg: #ffffff;
+  box-shadow: none;
+}
+
+#inv-table .col-number {
+  width: 17ch;
+}
+
+#inv-table .col-date {
+  width: 15.6ch;
+}
+
+#inv-table .col-type {
+  width: 12ch;
+}
+
+#inv-table .col-amount {
+  width: 19.8ch;
+}
+
+#inv-table thead {
+  --bs-table-bg: #e9ecef;
+}
+
+#inv-table thead th {
+  text-transform: uppercase;
+  font-size: calc(1.1rem + 2pt);
+  border-bottom: none;
+}
+
+#inv-table th.sortable {
+  cursor: pointer;
+}
+
+#inv-table th .sort-icon {
+  font-size: 0.8rem;
+}
+
+#inv-table th,
+#inv-table td {
+  border: none;
+}
+
 #menu-button {
   left: 4rem;
   top: 50%;
@@ -190,6 +246,14 @@ body {
   #tx-table .col-desc,
   #tx-table .col-amount,
   #tx-table .col-account {
+    width: auto;
+  }
+
+  #inv-table .col-number,
+  #inv-table .col-date,
+  #inv-table .col-type,
+  #inv-table .col-desc,
+  #inv-table .col-amount {
     width: auto;
   }
 }
