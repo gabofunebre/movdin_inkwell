@@ -1,8 +1,13 @@
 {% extends "base.html" %}
+
+{% block head_extras %}
+<link rel="stylesheet" href="/static/css/ticket.css">
+{% endblock %}
+
 {% block content %}
-<div class="container my-4">
+<div class="ticket mx-auto my-4">
   <h2>Factura {{ invoice.number }}</h2>
-  <table class="table table-bordered w-auto">
+  <table class="w-100">
     <tbody>
       <tr><th>Fecha</th><td>{{ invoice.date }}</td></tr>
       <tr><th>Tipo</th><td>{{ 'Venta' if invoice.type == 'sale' else 'Compra' }}</td></tr>
@@ -15,7 +20,7 @@
       <tr><th>IIBB %</th><td>{{ invoice.iibb_percent }}%</td></tr>
       <tr><th>IIBB $</th><td>{{ symbol }} {{ invoice.iibb_amount|money }}</td></tr>
       {% endif %}
-      <tr><th>Total</th><td>{{ symbol }} {{ total|money }}</td></tr>
+      <tr class="total"><th>Total</th><td>{{ symbol }} {{ total|money }}</td></tr>
     </tbody>
   </table>
 </div>
