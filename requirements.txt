@@ -6,3 +6,4 @@ pydantic
 aiofiles
 jinja2
 itsdangerous
+python-multipart
