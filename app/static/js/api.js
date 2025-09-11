@@ -38,6 +38,32 @@ export async function createTransaction(payload) {
   return { ok: false, error };
 }
 
+export async function updateTransaction(id, payload) {
+  const res = await fetch(`/transactions/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) return { ok: true };
+  let error = 'Error al guardar';
+  try {
+    const data = await res.json();
+    error = data.detail || error;
+  } catch (_) {}
+  return { ok: false, error };
+}
+
+export async function deleteTransaction(id) {
+  const res = await fetch(`/transactions/${id}`, { method: 'DELETE' });
+  if (res.ok) return { ok: true };
+  let error = 'Error al eliminar';
+  try {
+    const data = await res.json();
+    error = data.detail || error;
+  } catch (_) {}
+  return { ok: false, error };
+}
+
 export async function createInvoice(payload) {
   const res = await fetch('/invoices', {
     method: 'POST',
@@ -53,6 +79,32 @@ export async function createInvoice(payload) {
     } else {
       error = data.detail || error;
     }
+  } catch (_) {}
+  return { ok: false, error };
+}
+
+export async function updateInvoice(id, payload) {
+  const res = await fetch(`/invoices/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) return { ok: true };
+  let error = 'Error al guardar';
+  try {
+    const data = await res.json();
+    error = data.detail || error;
+  } catch (_) {}
+  return { ok: false, error };
+}
+
+export async function deleteInvoice(id) {
+  const res = await fetch(`/invoices/${id}`, { method: 'DELETE' });
+  if (res.ok) return { ok: true };
+  let error = 'Error al eliminar';
+  try {
+    const data = await res.json();
+    error = data.detail || error;
   } catch (_) {}
   return { ok: false, error };
 }
