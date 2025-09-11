@@ -122,6 +122,7 @@ def account_balances(to_date: date | None = None, db: Session = Depends(get_db))
                 "balance"
             ),
             Account.color,
+            Account.is_billing,
         )
         .select_from(Account)
         .join(
@@ -139,20 +140,55 @@ def account_balances(to_date: date | None = None, db: Session = Depends(get_db))
             Account.opening_balance,
             Account.currency,
             Account.color,
+            Account.is_billing,
         )
         .order_by(Account.name)
     )
     rows = db.execute(stmt, {"to_date": to_date}).all()
-    return [
-        AccountBalance(
-            account_id=r.id,
-            name=r.name,
-            currency=r.currency,
-            balance=r.balance,
-            color=r.color,
+
+    tax_stmt = (
+        select(
+            Invoice.account_id,
+            func.coalesce(
+                func.sum(
+                    case((Invoice.type == InvoiceType.PURCHASE, Invoice.iva_amount), else_=0)
+                ),
+                0,
+            ).label("iva_pur"),
+            func.coalesce(
+                func.sum(
+                    case((Invoice.type == InvoiceType.SALE, Invoice.iva_amount), else_=0)
+                ),
+                0,
+            ).label("iva_sale"),
+            func.coalesce(
+                func.sum(
+                    case((Invoice.type == InvoiceType.SALE, Invoice.iibb_amount), else_=0)
+                ),
+                0,
+            ).label("iibb"),
+        ).group_by(Invoice.account_id)
+    )
+    tax_rows = db.execute(tax_stmt).all()
+    tax_map = {r.account_id: r for r in tax_rows}
+
+    balances = []
+    for r in rows:
+        balance = r.balance
+        if r.is_billing:
+            taxes = tax_map.get(r.id)
+            if taxes:
+                balance = balance - taxes.iva_sale - taxes.iibb + taxes.iva_pur
+        balances.append(
+            AccountBalance(
+                account_id=r.id,
+                name=r.name,
+                currency=r.currency,
+                balance=balance,
+                color=r.color,
+            )
         )
-        for r in rows
-    ]
+    return balances
 
 
 @router.get("/{account_id}/balance", response_model=BalanceOut)
