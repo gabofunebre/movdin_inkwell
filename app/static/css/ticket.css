@@ -1,0 +1,53 @@
+.ticket {
+  width: 400px;
+  padding: 15px;
+  border: 1px dashed #000;
+  font-family: "Courier New", monospace;
+  font-size: 1rem;
+}
+
+.ticket h2 {
+  text-align: center;
+  margin-bottom: 12px;
+  font-size: 1.4rem;
+}
+
+.ticket table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ticket th {
+  text-align: left;
+  font-weight: normal;
+  padding: 4px 0;
+}
+
+.ticket td {
+  text-align: left;
+  padding: 4px 0;
+}
+
+.ticket td.amount {
+  text-align: right;
+}
+
+.ticket td.description {
+  word-break: break-word;
+}
+
+.ticket tr.total th,
+.ticket tr.total td {
+  border-top: 1px dashed #000;
+  font-weight: bold;
+}
+
+@media print {
+  body {
+    width: 80mm;
+  }
+  .ticket {
+    width: 100%;
+    border: none;
+  }
+}

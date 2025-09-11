@@ -1,21 +1,28 @@
 {% extends "base.html" %}
+
+{% block head_extras %}
+<link rel="stylesheet" href="/static/css/ticket.css">
+{% endblock %}
+
 {% block content %}
-<div class="container my-4">
+<div class="ticket mx-auto my-4">
   <h2>Factura {{ invoice.number }}</h2>
-  <table class="table table-bordered w-auto">
+  <table class="w-100">
+    <colgroup>
+      <col style="width:35%">
+      <col style="width:65%">
+    </colgroup>
     <tbody>
       <tr><th>Fecha</th><td>{{ invoice.date }}</td></tr>
       <tr><th>Tipo</th><td>{{ 'Venta' if invoice.type == 'sale' else 'Compra' }}</td></tr>
       <tr><th>Cuenta</th><td style="color:{{ account.color if account else '' }}">{{ account.name if account else '' }}</td></tr>
-      <tr><th>Concepto</th><td>{{ invoice.description }}</td></tr>
-      <tr><th>Monto sin impuesto</th><td>{{ symbol }} {{ invoice.amount|money }}</td></tr>
-      <tr><th>IVA %</th><td>{{ invoice.iva_percent }}%</td></tr>
-      <tr><th>IVA $</th><td>{{ symbol }} {{ invoice.iva_amount|money }}</td></tr>
+      <tr><th>Concepto</th><td class="description">{{ invoice.description }}</td></tr>
+      <tr><th>Monto sin impuesto</th><td class="amount">{{ symbol }} {{ invoice.amount|money }}</td></tr>
+      <tr><th>IVA {{ invoice.iva_percent }}%</th><td class="amount">{{ symbol }} {{ invoice.iva_amount|money }}</td></tr>
       {% if invoice.iibb_amount %}
-      <tr><th>IIBB %</th><td>{{ invoice.iibb_percent }}%</td></tr>
-      <tr><th>IIBB $</th><td>{{ symbol }} {{ invoice.iibb_amount|money }}</td></tr>
+      <tr><th>IIBB {{ invoice.iibb_percent }}%</th><td class="amount">{{ symbol }} {{ invoice.iibb_amount|money }}</td></tr>
       {% endif %}
-      <tr><th>Total</th><td>{{ symbol }} {{ total|money }}</td></tr>
+      <tr class="total"><th>Total</th><td class="amount">{{ symbol }} {{ total|money }}</td></tr>
     </tbody>
   </table>
 </div>
