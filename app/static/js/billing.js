@@ -55,9 +55,12 @@ function renderInvoices() {
           ? a.description.localeCompare(b.description)
           : b.description.localeCompare(a.description);
       case 4:
-        const totalA = Number(a.amount) + Number(a.iva_amount);
-        const totalB = Number(b.amount) + Number(b.iva_amount);
-        return sortAsc ? totalA - totalB : totalB - totalA;
+        // Comparar por monto total (importe sin impuestos + IVA)
+        const totalWithIvaA = Number(a.amount) + Number(a.iva_amount);
+        const totalWithIvaB = Number(b.amount) + Number(b.iva_amount);
+        return sortAsc
+          ? totalWithIvaA - totalWithIvaB
+          : totalWithIvaB - totalWithIvaA;
       default:
         return 0;
     }
