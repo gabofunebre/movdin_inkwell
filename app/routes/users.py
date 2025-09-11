@@ -44,6 +44,18 @@ def login(
             },
             status_code=400,
         )
+    if not user.is_active:
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "title": "Ingresar",
+                "header_title": "Ingresar",
+                "error": "Cuenta pendiente de aprobación",
+                "user": None,
+            },
+            status_code=400,
+        )
     request.session["user_id"] = user.id
     return RedirectResponse("/", status_code=302)
 
@@ -76,12 +88,23 @@ def register(
             },
             status_code=400,
         )
-    user = User(username=username, email=email, password_hash=hash_password(password))
+    user = User(
+        username=username,
+        email=email,
+        password_hash=hash_password(password),
+    )
     db.add(user)
     db.commit()
-    db.refresh(user)
-    request.session["user_id"] = user.id
-    return RedirectResponse("/", status_code=302)
+    return templates.TemplateResponse(
+        "register.html",
+        {
+            "request": request,
+            "title": "Registro",
+            "header_title": "Registro",
+            "message": "Registro exitoso. Un administrador debe aprobar su solicitud.",
+            "user": None,
+        },
+    )
 
 
 @router.get("/logout")
@@ -92,7 +115,8 @@ def logout(request: Request):
 
 @router.get("/users", dependencies=[Depends(require_admin)])
 def list_users(request: Request, db: Session = Depends(get_db)):
-    users = db.query(User).all()
+    pending = db.query(User).filter(User.is_active.is_(False)).all()
+    users = db.query(User).filter(User.is_active.is_(True)).all()
     return templates.TemplateResponse(
         "users.html",
         {
@@ -100,6 +124,7 @@ def list_users(request: Request, db: Session = Depends(get_db)):
             "title": "Usuarios",
             "header_title": "Usuarios",
             "users": users,
+            "pending": pending,
         },
     )
 
@@ -109,6 +134,16 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     user = db.get(User, user_id)
     if user:
         db.delete(user)
+        db.commit()
+    return RedirectResponse("/users", status_code=302)
+
+
+@router.post("/users/{user_id}/approve", dependencies=[Depends(require_admin)])
+def approve_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.get(User, user_id)
+    if user:
+        user.is_active = True
+        db.add(user)
         db.commit()
     return RedirectResponse("/users", status_code=302)
 

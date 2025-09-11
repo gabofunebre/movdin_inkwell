@@ -30,7 +30,8 @@ app.add_middleware(
 async def require_login_middleware(request: Request, call_next):
     path = request.url.path
     allowed = {"/login", "/register", "/health"}
-    if not request.session.get("user_id") and not path.startswith("/static") and path not in allowed:
+    session = request.scope.get("session") or {}
+    if not session.get("user_id") and not path.startswith("/static") and path not in allowed:
         return RedirectResponse("/login")
     return await call_next(request)
 
@@ -58,6 +59,7 @@ def on_startup() -> None:
                     email=admin_email,
                     password_hash=hash_password(admin_pass),
                     is_admin=True,
+                    is_active=True,
                 )
                 db.add(user)
                 db.commit()
