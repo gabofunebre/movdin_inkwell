@@ -1,18 +1,21 @@
 from datetime import date
+from decimal import Decimal
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import and_, bindparam, func, select
+from sqlalchemy import and_, bindparam, func, select, case
 from sqlalchemy.orm import Session
 
 from config.db import get_db
-from models import Account, Transaction
+from config.constants import InvoiceType
+from models import Account, Transaction, Invoice
 from schemas import (
     AccountBalance,
     AccountIn,
     AccountOut,
     BalanceOut,
     TransactionWithBalance,
+    AccountSummary,
 )
 
 router = APIRouter(prefix="/accounts")
@@ -171,6 +174,71 @@ def account_balance(account_id: int, to_date: date | None = None, db: Session = 
     )
     row = db.execute(stmt, {"account_id": account_id, "to_date": to_date}).one()
     return BalanceOut(balance=row.balance)
+
+
+@router.get("/{account_id}/summary", response_model=AccountSummary)
+def account_summary(account_id: int, db: Session = Depends(get_db)):
+    acc = db.get(Account, account_id)
+    if not acc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Account not found"
+        )
+    stmt = (
+        select(
+            Account.opening_balance,
+            Account.is_billing,
+            func.coalesce(
+                func.sum(case((Transaction.amount > 0, Transaction.amount), else_=0)),
+                0,
+            ).label("income"),
+            func.coalesce(
+                func.sum(case((Transaction.amount < 0, -Transaction.amount), else_=0)),
+                0,
+            ).label("expense"),
+        )
+        .outerjoin(Transaction)
+        .where(Account.id == account_id)
+        .group_by(Account.id)
+    )
+    row = db.execute(stmt).one()
+    iva_pur = iva_sale = iibb = Decimal("0")
+    if row.is_billing:
+        tax_stmt = (
+            select(
+                func.coalesce(
+                    func.sum(
+                        case((Invoice.type == InvoiceType.PURCHASE, Invoice.iva_amount), else_=0)
+                    ),
+                    0,
+                ).label("iva_pur"),
+                func.coalesce(
+                    func.sum(
+                        case((Invoice.type == InvoiceType.SALE, Invoice.iva_amount), else_=0)
+                    ),
+                    0,
+                ).label("iva_sale"),
+                func.coalesce(
+                    func.sum(
+                        case((Invoice.type == InvoiceType.SALE, Invoice.iibb_amount), else_=0)
+                    ),
+                    0,
+                ).label("iibb"),
+            )
+            .where(Invoice.account_id == account_id)
+        )
+        tax_row = db.execute(tax_stmt).one()
+        iva_pur = tax_row.iva_pur
+        iva_sale = tax_row.iva_sale
+        iibb = tax_row.iibb
+    return AccountSummary(
+        opening_balance=row.opening_balance,
+        income_balance=row.income,
+        expense_balance=row.expense,
+        is_billing=row.is_billing,
+        iva_purchases=iva_pur if row.is_billing else None,
+        iva_sales=iva_sale if row.is_billing else None,
+        iibb=iibb if row.is_billing else None,
+    )
 
 
 @router.get("/{account_id}/transactions", response_model=List[TransactionWithBalance])

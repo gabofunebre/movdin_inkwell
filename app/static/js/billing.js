@@ -1,4 +1,4 @@
-import { fetchAccounts, fetchInvoices, createInvoice } from './api.js';
+import { fetchAccounts, fetchInvoices, createInvoice } from './api.js?v=1';
 import { renderInvoice, showOverlay, hideOverlay } from './ui.js';
 
 const tbody = document.querySelector('#inv-table tbody');

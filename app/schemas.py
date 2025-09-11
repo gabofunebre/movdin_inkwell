@@ -90,3 +90,13 @@ class AccountBalance(BaseModel):
 
 class BalanceOut(BaseModel):
     balance: Decimal
+
+
+class AccountSummary(BaseModel):
+    opening_balance: Decimal
+    income_balance: Decimal
+    expense_balance: Decimal
+    is_billing: bool
+    iva_purchases: Decimal | None = None
+    iva_sales: Decimal | None = None
+    iibb: Decimal | None = None

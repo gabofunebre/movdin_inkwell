@@ -7,7 +7,7 @@ import {
   createFrequent,
   updateFrequent,
   deleteFrequent
-} from './api.js';
+} from './api.js?v=1';
 import {
   renderAccount,
   renderFrequent,
