@@ -3,6 +3,8 @@
 {% block content %}
 <div class="container mt-5" style="max-width:400px;">
   {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+  {% if message %}<div class="alert alert-info">{{ message }}</div>{% endif %}
+  {% if not message %}
   <form method="post">
     <div class="mb-3">
       <label class="form-label">Usuario</label>
@@ -21,6 +23,7 @@
   <p class="mt-3 text-center">
     ¿Ya tenés cuenta? <a href="/login">Ingresar</a>
   </p>
+  {% endif %}
 </div>
 {% endblock %}
 

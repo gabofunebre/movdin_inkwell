@@ -1,8 +1,37 @@
-{% extends "base.html" %}
+{% extends 'base.html' %}
 
 {% block content %}
-<div class="container mt-4">
-  <table class="table table-striped">
+<div class='container mt-4'>
+  {% if pending %}
+  <h3>Solicitudes de registro</h3>
+  <table class='table table-striped mb-5'>
+    <thead>
+      <tr>
+        <th>ID</th><th>Usuario</th><th>Email</th><th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for u in pending %}
+      <tr>
+        <td>{{ u.id }}</td>
+        <td>{{ u.username }}</td>
+        <td>{{ u.email }}</td>
+        <td>
+          <form method='post' action='/users/{{ u.id }}/approve' class='d-inline'>
+            <button class='btn btn-sm btn-success' title='Aprobar'><i class='bi bi-check'></i></button>
+          </form>
+          <form method='post' action='/users/{{ u.id }}/delete' class='d-inline' onsubmit='return confirm("¿Eliminar usuario?");'>
+            <button class='btn btn-sm btn-danger' title='Eliminar'><i class='bi bi-trash'></i></button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <h3>Usuarios activos</h3>
+  <table class='table table-striped'>
     <thead>
       <tr>
         <th>ID</th><th>Usuario</th><th>Email</th><th>Admin</th><th>Acciones</th>
@@ -16,11 +45,11 @@
         <td>{{ u.email }}</td>
         <td>{% if u.is_admin %}Sí{% else %}No{% endif %}</td>
         <td>
-          <form method="post" action="/users/{{ u.id }}/toggle" class="d-inline">
-            <button class="btn btn-sm btn-secondary" title="Cambiar rol"><i class="bi bi-key"></i></button>
+          <form method='post' action='/users/{{ u.id }}/toggle' class='d-inline'>
+            <button class='btn btn-sm btn-secondary' title='Cambiar rol'><i class='bi bi-key'></i></button>
           </form>
-          <form method="post" action="/users/{{ u.id }}/delete" class="d-inline" onsubmit="return confirm('¿Eliminar usuario?');">
-            <button class="btn btn-sm btn-danger" title="Eliminar"><i class="bi bi-trash"></i></button>
+          <form method='post' action='/users/{{ u.id }}/delete' class='d-inline' onsubmit='return confirm("¿Eliminar usuario?");'>
+            <button class='btn btn-sm btn-danger' title='Eliminar'><i class='bi bi-trash'></i></button>
           </form>
         </td>
       </tr>
@@ -29,4 +58,3 @@
   </table>
 </div>
 {% endblock %}
-
