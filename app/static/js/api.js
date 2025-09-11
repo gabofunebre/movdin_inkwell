@@ -18,6 +18,11 @@ export async function fetchAccountBalances() {
   return res.json();
 }
 
+export async function fetchAccountSummary(id) {
+  const res = await fetch(`/accounts/${id}/summary`);
+  return res.json();
+}
+
 export async function createTransaction(payload) {
   const res = await fetch('/transactions', {
     method: 'POST',

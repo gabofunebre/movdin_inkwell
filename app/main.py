@@ -57,11 +57,11 @@ async def config(request: Request):
     )
 
 
-@app.get("/totals.html", response_class=HTMLResponse)
-async def totals(request: Request):
+@app.get("/accounts.html", response_class=HTMLResponse)
+async def accounts_page(request: Request):
     return templates.TemplateResponse(
-        "totals.html",
-        {"request": request, "title": "Totales", "header_title": "Totales"},
+        "accounts.html",
+        {"request": request, "title": "Cuentas", "header_title": "Cuentas"},
     )
 
 
