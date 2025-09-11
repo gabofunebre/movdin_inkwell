@@ -56,8 +56,8 @@ function renderInvoices() {
           : b.description.localeCompare(a.description);
       case 4:
         // Comparar por monto total (importe sin impuestos + IVA)
-        const totalWithIvaA = Number(a.amount) + Number(a.iva_amount);
-        const totalWithIvaB = Number(b.amount) + Number(b.iva_amount);
+        const totalWithIvaA = Math.abs(Number(a.amount) + Number(a.iva_amount));
+        const totalWithIvaB = Math.abs(Number(b.amount) + Number(b.iva_amount));
         return sortAsc
           ? totalWithIvaA - totalWithIvaB
           : totalWithIvaB - totalWithIvaA;
@@ -153,18 +153,17 @@ container.addEventListener('scroll', () => {
   }
 });
 
-form.addEventListener('submit', async e => {
-  e.preventDefault();
-  if (!form.reportValidity()) return;
-  const data = new FormData(form);
-  const isPurchase = form.dataset.type === 'purchase';
-  let amount = parseFloat(data.get('amount'));
-  amount = isPurchase ? -Math.abs(amount) : Math.abs(amount);
-  const payload = {
-    date: data.get('date'),
-    number: data.get('number'),
-    description: data.get('description'),
-    amount,
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!form.reportValidity()) return;
+    const data = new FormData(form);
+    const isPurchase = form.dataset.type === 'purchase';
+    const amount = Math.abs(parseFloat(data.get('amount')));
+    const payload = {
+      date: data.get('date'),
+      number: data.get('number'),
+      description: data.get('description'),
+      amount,
     account_id: billingAccount.id,
     type: form.dataset.type,
     iva_percent: parseFloat(data.get('iva_percent')) || 0,

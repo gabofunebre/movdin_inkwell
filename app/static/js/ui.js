@@ -57,7 +57,7 @@ export function renderInvoice(tbody, inv, accountMap) {
   const typeText = inv.type === 'sale' ? 'Venta' : 'Compra';
   // Monto total calculado como importe sin impuestos más IVA
   const totalWithIva = Number(inv.amount) + Number(inv.iva_amount);
-  const amountColor = totalWithIva >= 0 ? 'rgb(40,150,20)' : 'rgb(170,10,10)';
+  const amountColor = inv.type === 'sale' ? 'rgb(40,150,20)' : 'rgb(170,10,10)';
   const amount = formatCurrency(Math.abs(totalWithIva));
   tr.innerHTML =
     `<td class="text-center">${inv.number || ''}</td>` +
