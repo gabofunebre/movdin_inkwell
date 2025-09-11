@@ -1,9 +1,16 @@
 import { CURRENCY_SYMBOLS } from './constants.js';
 
+export function formatCurrency(value) {
+  return Number(value).toLocaleString('es-AR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
 export function renderTransaction(tbody, tx, accountMap) {
   const tr = document.createElement('tr');
   const isIncome = tx.amount >= 0;
-  const amount = Math.abs(tx.amount).toFixed(2);
+  const amount = formatCurrency(Math.abs(tx.amount));
   const acc = accountMap[tx.account_id];
   const accName = acc ? acc.name : '';
   const accColor = acc ? acc.color : '';
@@ -51,7 +58,7 @@ export function renderInvoice(tbody, inv, accountMap) {
   // Monto total calculado como importe sin impuestos más IVA
   const totalWithIva = Number(inv.amount) + Number(inv.iva_amount);
   const amountColor = totalWithIva >= 0 ? 'rgb(40,150,20)' : 'rgb(170,10,10)';
-  const amount = Math.abs(totalWithIva).toFixed(2);
+  const amount = formatCurrency(Math.abs(totalWithIva));
   tr.innerHTML =
     `<td class="text-center">${inv.number || ''}</td>` +
     `<td class="text-center">${formattedDate}</td>` +
