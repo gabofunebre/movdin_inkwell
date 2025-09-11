@@ -1,5 +1,5 @@
 import { fetchAccounts, fetchInvoices, createInvoice } from './api.js?v=1';
-import { renderInvoice, showOverlay, hideOverlay } from './ui.js';
+import { renderInvoice, showOverlay, hideOverlay, formatCurrency } from './ui.js';
 
 const tbody = document.querySelector('#inv-table tbody');
 const container = document.getElementById('table-container');
@@ -72,11 +72,11 @@ function renderInvoices() {
 function recalcTaxes() {
   const amount = parseFloat(amountInput.value) || 0;
   const ivaPercent = parseFloat(ivaPercentInput.value) || 0;
-  const ivaAmount = amount * ivaPercent / 100;
-  ivaAmountInput.value = ivaAmount.toFixed(2);
+  const ivaAmount = (amount * ivaPercent) / 100;
+  ivaAmountInput.value = formatCurrency(ivaAmount);
   const iibbPercent = parseFloat(iibbPercentInput.value) || 0;
-  const iibbAmount = (amount + ivaAmount) * iibbPercent / 100;
-  iibbAmountInput.value = iibbAmount.toFixed(2);
+  const iibbAmount = ((amount + ivaAmount) * iibbPercent) / 100;
+  iibbAmountInput.value = formatCurrency(iibbAmount);
 }
 amountInput.addEventListener('input', recalcTaxes);
 ivaPercentInput.addEventListener('input', recalcTaxes);

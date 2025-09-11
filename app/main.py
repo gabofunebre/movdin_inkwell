@@ -20,6 +20,13 @@ app = FastAPI(title="Movimientos")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 
+def format_money(value: float) -> str:
+    return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+templates.env.filters["money"] = format_money
+
+
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
