@@ -157,8 +157,9 @@ form.addEventListener('submit', async e => {
   e.preventDefault();
   if (!form.reportValidity()) return;
   const data = new FormData(form);
+  const isPurchase = form.dataset.type === 'purchase';
   let amount = parseFloat(data.get('amount'));
-  amount = form.dataset.type === 'purchase' ? -Math.abs(amount) : Math.abs(amount);
+  amount = isPurchase ? -Math.abs(amount) : Math.abs(amount);
   const payload = {
     date: data.get('date'),
     number: data.get('number'),
@@ -167,7 +168,7 @@ form.addEventListener('submit', async e => {
     account_id: billingAccount.id,
     type: form.dataset.type,
     iva_percent: parseFloat(data.get('iva_percent')) || 0,
-    iibb_percent: parseFloat(data.get('iibb_percent')) || 0
+    iibb_percent: isPurchase ? 0 : parseFloat(data.get('iibb_percent')) || 0
   };
   const today = new Date().toISOString().split('T')[0];
   if (payload.date > today) {
