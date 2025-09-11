@@ -34,11 +34,37 @@ export function renderTransaction(tbody, tx, accountMap) {
     `<td class="${descClass}"${descStyle}>${concept}</td>` +
     `<td class="${amountClass}" style="color:${amountColor}">${symbol} ${amount}</td>` +
     `<td class="text-center" style="color:${accColor}">${accName}</td>`;
-  tr.addEventListener('click', () => {
-    tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
-    tr.classList.add('selected');
-  });
   tbody.appendChild(tr);
+
+  if (window.isAdmin) {
+    const actionsTr = document.createElement('tr');
+    actionsTr.classList.add('tx-actions', 'd-none');
+    const td = document.createElement('td');
+    td.colSpan = 4;
+    td.className = 'text-center';
+    td.innerHTML =
+      `<button class="btn btn-sm btn-outline-secondary me-2" data-action="edit"><i class="bi bi-pencil"></i></button>` +
+      `<button class="btn btn-sm btn-outline-danger" data-action="delete"><i class="bi bi-trash"></i></button>`;
+    actionsTr.appendChild(td);
+    tbody.appendChild(actionsTr);
+    tr.addEventListener('click', () => {
+      tbody.querySelectorAll('tr.tx-actions').forEach(r => r.classList.add('d-none'));
+      actionsTr.classList.toggle('d-none');
+    });
+    td.querySelector('[data-action="edit"]').addEventListener('click', e => {
+      e.stopPropagation();
+      // TODO: open edit modal and update transaction
+    });
+    td.querySelector('[data-action="delete"]').addEventListener('click', e => {
+      e.stopPropagation();
+      // TODO: call API to delete transaction
+    });
+  } else {
+    tr.addEventListener('click', () => {
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+      tr.classList.add('selected');
+    });
+  }
 }
 
 export function renderInvoice(tbody, inv, accountMap) {
