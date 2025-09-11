@@ -18,6 +18,7 @@ function renderAccounts(data) {
     const totalTd = document.createElement('td');
     const symbol = CURRENCY_SYMBOLS[acc.currency] || '';
     totalTd.textContent = `${symbol} ${total}`;
+    totalTd.classList.add('fw-bold', 'fs-5');
     tr.appendChild(nameTd);
     tr.appendChild(totalTd);
     tr.addEventListener('click', () => toggleDetails(tr, acc));
@@ -70,7 +71,7 @@ async function toggleDetails(row, acc) {
     html += '</div>';
   }
   html += '</div>';
-  html += `<div class="row"><div class="col text-center"><p class="mb-0"><strong>Total Disponible:</strong> <span class="text-dark">${symbol} ${formatCurrency(total)}</span></p></div></div>`;
+  html += `<div class="row"><div class="col text-center"><p class="mb-0"><strong>Total Disponible:</strong> <span class="text-dark fw-bold fs-5">${symbol} ${formatCurrency(total)}</span></p></div></div>`;
   html += '</div>';
   detailTd.innerHTML = html;
   detailTr.appendChild(detailTd);
