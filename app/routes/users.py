@@ -19,7 +19,8 @@ router = APIRouter()
 @router.get("/login")
 def login_form(request: Request):
     return templates.TemplateResponse(
-        "login.html", {"request": request, "title": "Ingresar", "header_title": "Ingresar"}
+        "login.html",
+        {"request": request, "title": "Ingresar", "header_title": "Ingresar", "user": None},
     )
 
 
@@ -39,6 +40,7 @@ def login(
                 "title": "Ingresar",
                 "header_title": "Ingresar",
                 "error": "Credenciales inválidas",
+                "user": None,
             },
             status_code=400,
         )
@@ -50,7 +52,7 @@ def login(
 def register_form(request: Request):
     return templates.TemplateResponse(
         "register.html",
-        {"request": request, "title": "Registro", "header_title": "Registro"},
+        {"request": request, "title": "Registro", "header_title": "Registro", "user": None},
     )
 
 
@@ -70,6 +72,7 @@ def register(
                 "title": "Registro",
                 "header_title": "Registro",
                 "error": "Usuario o email existente",
+                "user": None,
             },
             status_code=400,
         )

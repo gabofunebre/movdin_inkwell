@@ -5,5 +5,7 @@ psycopg2-binary
 pydantic
 aiofiles
 jinja2
-itsdangerous
 python-multipart
+itsdangerous
+python-dotenv
+

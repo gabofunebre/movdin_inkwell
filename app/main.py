@@ -1,13 +1,12 @@
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from starlette.middleware.sessions import SessionMiddleware
 import os
-
+from dotenv import load_dotenv
 from sqlalchemy.orm import Session
-
 from config.db import get_db, init_db, SessionLocal
 from config.constants import CURRENCY_SYMBOLS
 from models import Account, Invoice, User
@@ -19,10 +18,21 @@ from routes.frequents import router as frequents_router
 from routes.invoices import router as invoices_router
 from routes.users import router as users_router
 
+load_dotenv()
+
+
 app = FastAPI(title="Movimientos")
 app.add_middleware(
     SessionMiddleware, secret_key=os.getenv("SECRET_KEY", "secret")
 )
+
+@app.middleware("http")
+async def require_login_middleware(request: Request, call_next):
+    path = request.url.path
+    allowed = {"/login", "/register", "/health"}
+    if not request.session.get("user_id") and not path.startswith("/static") and path not in allowed:
+        return RedirectResponse("/login")
+    return await call_next(request)
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
@@ -37,7 +47,7 @@ templates.env.filters["money"] = format_money
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
-    admin_user = os.getenv("ADMIN_USER")
+    admin_user = os.getenv("ADMIN_USERNAME")
     admin_pass = os.getenv("ADMIN_PASSWORD")
     admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
     if admin_user and admin_pass:
