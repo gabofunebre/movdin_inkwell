@@ -23,7 +23,9 @@ load_dotenv()
 
 app = FastAPI(title="Movimientos")
 app.add_middleware(
-    SessionMiddleware, secret_key=os.getenv("SECRET_KEY", "secret")
+    SessionMiddleware,
+    secret_key=os.getenv("SECRET_KEY", "secret"),
+    https_only=False,
 )
 
 @app.middleware("http")
