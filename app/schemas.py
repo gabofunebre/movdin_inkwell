@@ -100,3 +100,19 @@ class AccountSummary(BaseModel):
     iva_purchases: Decimal | None = None
     iva_sales: Decimal | None = None
     iibb: Decimal | None = None
+
+
+class UserCreate(BaseModel):
+    username: str
+    email: str
+    password: str
+
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    email: str
+    is_admin: bool
+
+    class Config:
+        from_attributes = True

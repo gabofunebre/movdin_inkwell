@@ -3,19 +3,26 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
+from starlette.middleware.sessions import SessionMiddleware
+import os
 
 from sqlalchemy.orm import Session
 
-from config.db import get_db, init_db
+from config.db import get_db, init_db, SessionLocal
 from config.constants import CURRENCY_SYMBOLS
-from models import Account, Invoice
+from models import Account, Invoice, User
+from auth import get_current_user, require_admin, hash_password
 from routes.accounts import router as accounts_router
 from routes.health import router as health_router
 from routes.transactions import router as transactions_router
 from routes.frequents import router as frequents_router
 from routes.invoices import router as invoices_router
+from routes.users import router as users_router
 
 app = FastAPI(title="Movimientos")
+app.add_middleware(
+    SessionMiddleware, secret_key=os.getenv("SECRET_KEY", "secret")
+)
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
@@ -30,12 +37,27 @@ templates.env.filters["money"] = format_money
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
+    admin_user = os.getenv("ADMIN_USER")
+    admin_pass = os.getenv("ADMIN_PASSWORD")
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
+    if admin_user and admin_pass:
+        with SessionLocal() as db:
+            if not db.query(User).filter(User.username == admin_user).first():
+                user = User(
+                    username=admin_user,
+                    email=admin_email,
+                    password_hash=hash_password(admin_pass),
+                    is_admin=True,
+                )
+                db.add(user)
+                db.commit()
 
 app.include_router(health_router)
 app.include_router(accounts_router)
 app.include_router(transactions_router)
 app.include_router(frequents_router)
 app.include_router(invoices_router)
+app.include_router(users_router)
 
 app.mount(
     "/static",
@@ -45,35 +67,46 @@ app.mount(
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+async def index(request: Request, user=Depends(get_current_user)):
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
             "title": "Movimientos",
             "header_title": "Movimientos de dinero",
+            "user": user,
         },
     )
 
 
 @app.get("/config.html", response_class=HTMLResponse)
-async def config(request: Request):
+async def config(request: Request, user=Depends(require_admin)):
     return templates.TemplateResponse(
         "config.html",
-        {"request": request, "title": "Configuración", "header_title": "Configuración"},
+        {
+            "request": request,
+            "title": "Configuración",
+            "header_title": "Configuración",
+            "user": user,
+        },
     )
 
 
 @app.get("/accounts.html", response_class=HTMLResponse)
-async def accounts_page(request: Request):
+async def accounts_page(request: Request, user=Depends(get_current_user)):
     return templates.TemplateResponse(
         "accounts.html",
-        {"request": request, "title": "Cuentas", "header_title": "Cuentas"},
+        {
+            "request": request,
+            "title": "Cuentas",
+            "header_title": "Cuentas",
+            "user": user,
+        },
     )
 
 
 @app.get("/billing.html", response_class=HTMLResponse)
-async def billing(request: Request, db: Session = Depends(get_db)):
+async def billing(request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)):
     acc = db.query(Account).filter(Account.is_billing.is_(True)).first()
     if acc:
         title = f"Facturación - {acc.name}"
@@ -85,13 +118,13 @@ async def billing(request: Request, db: Session = Depends(get_db)):
         header_title = "Facturación"
     return templates.TemplateResponse(
         "billing.html",
-        {"request": request, "title": title, "header_title": header_title},
+        {"request": request, "title": title, "header_title": header_title, "user": user},
     )
 
 
 @app.get("/invoice/{invoice_id}", response_class=HTMLResponse)
 async def invoice_detail(
-    request: Request, invoice_id: int, db: Session = Depends(get_db)
+    request: Request, invoice_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)
 ):
     inv = db.get(Invoice, invoice_id)
     if not inv:
@@ -109,5 +142,6 @@ async def invoice_detail(
             "account": acc,
             "symbol": symbol,
             "total": total,
+            "user": user,
         },
     )
