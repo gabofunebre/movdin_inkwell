@@ -41,14 +41,36 @@ async function toggleDetails(row, acc) {
   detailTr.classList.add('details');
   const detailTd = document.createElement('td');
   detailTd.colSpan = 2;
-  let html = `<div class="text-start"><p><strong>Saldo inicial:</strong> ${symbol} ${formatCurrency(summary.opening_balance)}</p>`;
-  html += `<p><strong>Ingresos:</strong> ${symbol} ${formatCurrency(summary.income_balance)}</p>`;
-  html += `<p><strong>Egresos:</strong> ${symbol} ${formatCurrency(summary.expense_balance)}</p>`;
+
+  const balance =
+    Number(summary.opening_balance) +
+    Number(summary.income_balance) -
+    Number(summary.expense_balance);
+  const ivaBalance = summary.is_billing
+    ? Number(summary.iva_purchases) - Number(summary.iva_sales)
+    : 0;
+  const total = summary.is_billing
+    ? balance + ivaBalance - Number(summary.iibb)
+    : balance;
+
+  let html = '<div class="container text-start">';
+  html += '<div class="row">';
+  html += '<div class="col">';
+  html += `<p><strong>Saldo inicial:</strong> <span class="text-info">${symbol} ${formatCurrency(summary.opening_balance)}</span></p>`;
+  html += `<p><strong>Ingresos:</strong> <span class="text-success">${symbol} ${formatCurrency(summary.income_balance)}</span></p>`;
+  html += `<p><strong>Egresos:</strong> <span class="text-danger">${symbol} ${formatCurrency(summary.expense_balance)}</span></p>`;
+  html += `<p><strong>Balance:</strong> <span class="text-dark fst-italic">${symbol} ${formatCurrency(balance)}</span></p>`;
+  html += '</div>';
   if (summary.is_billing) {
-    html += `<p><strong>IVA Compras:</strong> ${symbol} ${formatCurrency(summary.iva_purchases)}</p>`;
-    html += `<p><strong>IVA Ventas:</strong> ${symbol} ${formatCurrency(summary.iva_sales)}</p>`;
-    html += `<p><strong>IIBB:</strong> ${symbol} ${formatCurrency(summary.iibb)}</p>`;
+    html += '<div class="col">';
+    html += `<p><strong>IVA Compras:</strong> <span class="text-success">${symbol} ${formatCurrency(summary.iva_purchases)}</span></p>`;
+    html += `<p><strong>IVA Ventas:</strong> <span class="text-danger">${symbol} ${formatCurrency(summary.iva_sales)}</span></p>`;
+    html += `<p><strong>Balance IVA:</strong> <span class="text-dark fst-italic">${symbol} ${formatCurrency(ivaBalance)}</span></p>`;
+    html += `<p><strong>IIBB:</strong> <span class="text-danger">${symbol} ${formatCurrency(summary.iibb)}</span></p>`;
+    html += '</div>';
   }
+  html += '</div>';
+  html += `<div class="row"><div class="col text-center"><p class="mb-0"><strong>Total Disponible:</strong> <span class="text-dark">${symbol} ${formatCurrency(total)}</span></p></div></div>`;
   html += '</div>';
   detailTd.innerHTML = html;
   detailTr.appendChild(detailTd);
