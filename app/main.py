@@ -17,6 +17,7 @@ from routes.transactions import router as transactions_router
 from routes.frequents import router as frequents_router
 from routes.invoices import router as invoices_router
 from routes.users import router as users_router
+from routes.billing_info import router as billing_info_router
 
 load_dotenv()
 
@@ -27,7 +28,7 @@ app = FastAPI(title="Movimientos")
 @app.middleware("http")
 async def require_login_middleware(request: Request, call_next):
     path = request.url.path
-    allowed = {"/login", "/register", "/health"}
+    allowed = {"/login", "/register", "/health", "/facturacion-info"}
     if not request.session.get("user_id") and not path.startswith("/static") and path not in allowed:
         return RedirectResponse("/login")
     return await call_next(request)
@@ -74,6 +75,7 @@ app.include_router(transactions_router)
 app.include_router(frequents_router)
 app.include_router(invoices_router)
 app.include_router(users_router)
+app.include_router(billing_info_router)
 
 app.mount(
     "/static",

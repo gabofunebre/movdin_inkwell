@@ -5,7 +5,10 @@ from __future__ import annotations
 import hashlib
 from typing import Optional
 
+import os
+
 from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
 
 from config.db import get_db
@@ -38,4 +41,15 @@ def require_admin(user: User | None = Depends(get_current_user)) -> User:
     if not user or not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado")
     return user
+
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def require_api_key(api_key: str = Depends(api_key_header)) -> None:
+    """Validate request API key against the configured billing key."""
+
+    expected = os.getenv("BILLING_API_KEY")
+    if not api_key or api_key != expected:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado")
 
