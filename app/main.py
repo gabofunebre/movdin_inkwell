@@ -190,7 +190,6 @@ async def edit_invoice_page(
         },
     )
 
-
 @app.post("/invoice/{invoice_id}/delete", dependencies=[Depends(require_admin)])
 def delete_invoice_page(invoice_id: int, db: Session = Depends(get_db)):
     inv = db.get(Invoice, invoice_id)
