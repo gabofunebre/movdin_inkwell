@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class='container mt-4'>
-  {% if pending %}
+  {% if user.is_admin and pending %}
   <h3>Solicitudes de registro</h3>
   <table class='table table-striped mb-5'>
     <thead>
@@ -45,10 +45,13 @@
         <td>{{ u.email }}</td>
         <td>{% if u.is_admin %}Sí{% else %}No{% endif %}</td>
         <td>
-          {% if user and u.id != user.id %}
+          <a href='/users/{{ u.id }}/edit' class='btn btn-sm btn-primary' title='Editar'><i class='bi bi-pencil'></i></a>
+          {% if user.is_admin and u.id != user.id %}
           <form method='post' action='/users/{{ u.id }}/toggle' class='d-inline'>
             <button class='btn btn-sm btn-secondary' title='Cambiar rol'><i class='bi bi-key'></i></button>
           </form>
+          {% endif %}
+          {% if user.is_admin or u.id == user.id %}
           <form method='post' action='/users/{{ u.id }}/delete' class='d-inline' onsubmit='return confirm("¿Eliminar usuario?");'>
             <button class='btn btn-sm btn-danger' title='Eliminar'><i class='bi bi-trash'></i></button>
           </form>
@@ -60,3 +63,4 @@
   </table>
 </div>
 {% endblock %}
+
