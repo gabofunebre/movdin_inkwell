@@ -25,37 +25,59 @@ export function renderTransaction(tbody, tx, accountMap, onEdit, onDelete) {
     })
     .replace('.', '');
   const descClass = isIncome ? '' : 'fst-italic';
-  const descStyle = isIncome ? '' : ' style="padding-left:2em"';
+  const descStyle = isIncome ? '' : 'padding-left:2em';
   const amountClass = isIncome ? 'text-start' : 'text-end';
   const amountColor = isIncome ? 'rgb(40,150,20)' : 'rgb(170,10,10)';
   const concept = tx.number ? `${tx.number} - ${tx.description}` : tx.description;
-  tr.innerHTML =
-    `<td class="text-center">${formattedDate}</td>` +
-    `<td class="${descClass}"${descStyle}>${concept}</td>` +
-    `<td class="${amountClass}" style="color:${amountColor}">${symbol} ${amount}</td>` +
-    `<td class="text-center" style="color:${accColor}">${accName}</td>`;
-  tbody.appendChild(tr);
+
+  const dateTd = document.createElement('td');
+  dateTd.className = 'text-center';
+  dateTd.textContent = formattedDate;
+
+  const descTd = document.createElement('td');
+  descTd.className = descClass;
+  if (descStyle) descTd.style = descStyle;
+  descTd.textContent = concept;
+
+  const amountTd = document.createElement('td');
+  amountTd.className = amountClass;
+  amountTd.style = `color:${amountColor}`;
+  amountTd.textContent = `${symbol} ${amount}`;
+
+  const accTd = document.createElement('td');
+  accTd.className = 'text-center';
+  accTd.style = `color:${accColor}`;
+
+  const nameSpan = document.createElement('span');
+  nameSpan.textContent = accName;
+  accTd.appendChild(nameSpan);
 
   if (window.isAdmin) {
-    const actionsTr = document.createElement('tr');
-    actionsTr.classList.add('tx-actions', 'd-none');
-    const td = document.createElement('td');
-    td.colSpan = 4;
-    td.className = 'text-center';
-    td.innerHTML =
+    const actionsSpan = document.createElement('span');
+    actionsSpan.classList.add('tx-actions', 'd-none');
+    actionsSpan.innerHTML =
       `<button class="btn btn-sm btn-outline-secondary me-2" data-action="edit"><i class="bi bi-pencil"></i></button>` +
       `<button class="btn btn-sm btn-outline-danger" data-action="delete"><i class="bi bi-trash"></i></button>`;
-    actionsTr.appendChild(td);
-    tbody.appendChild(actionsTr);
+    accTd.appendChild(actionsSpan);
+
     tr.addEventListener('click', () => {
-      tbody.querySelectorAll('tr.tx-actions').forEach(r => r.classList.add('d-none'));
-      actionsTr.classList.toggle('d-none');
+      const showing = !actionsSpan.classList.contains('d-none');
+      tbody.querySelectorAll('span.tx-actions').forEach(el => {
+        el.classList.add('d-none');
+        const prev = el.previousElementSibling;
+        if (prev) prev.classList.remove('d-none');
+      });
+      if (!showing) {
+        nameSpan.classList.add('d-none');
+        actionsSpan.classList.remove('d-none');
+      }
     });
-    td.querySelector('[data-action="edit"]').addEventListener('click', e => {
+
+    actionsSpan.querySelector('[data-action="edit"]').addEventListener('click', e => {
       e.stopPropagation();
       if (onEdit) onEdit(tx);
     });
-    td.querySelector('[data-action="delete"]').addEventListener('click', e => {
+    actionsSpan.querySelector('[data-action="delete"]').addEventListener('click', e => {
       e.stopPropagation();
       if (onDelete) onDelete(tx);
     });
@@ -65,6 +87,9 @@ export function renderTransaction(tbody, tx, accountMap, onEdit, onDelete) {
       tr.classList.add('selected');
     });
   }
+
+  tr.append(dateTd, descTd, amountTd, accTd);
+  tbody.appendChild(tr);
 }
 
 export function renderInvoice(tbody, inv, accountMap) {
