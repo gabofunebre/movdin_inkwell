@@ -22,18 +22,22 @@ load_dotenv()
 
 
 app = FastAPI(title="Movimientos")
-app.add_middleware(
-    SessionMiddleware, secret_key=os.getenv("SECRET_KEY", "secret")
-)
+
 
 @app.middleware("http")
 async def require_login_middleware(request: Request, call_next):
     path = request.url.path
     allowed = {"/login", "/register", "/health"}
-    session = request.scope.get("session") or {}
-    if not session.get("user_id") and not path.startswith("/static") and path not in allowed:
+    if not request.session.get("user_id") and not path.startswith("/static") and path not in allowed:
         return RedirectResponse("/login")
     return await call_next(request)
+
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SECRET_KEY", "secret"),
+    https_only=os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true",
+)
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
