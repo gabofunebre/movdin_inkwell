@@ -45,12 +45,14 @@
         <td>{{ u.email }}</td>
         <td>{% if u.is_admin %}Sí{% else %}No{% endif %}</td>
         <td>
+          {% if user and u.id != user.id %}
           <form method='post' action='/users/{{ u.id }}/toggle' class='d-inline'>
             <button class='btn btn-sm btn-secondary' title='Cambiar rol'><i class='bi bi-key'></i></button>
           </form>
           <form method='post' action='/users/{{ u.id }}/delete' class='d-inline' onsubmit='return confirm("¿Eliminar usuario?");'>
             <button class='btn btn-sm btn-danger' title='Eliminar'><i class='bi bi-trash'></i></button>
           </form>
+          {% endif %}
         </td>
       </tr>
     {% endfor %}
