@@ -210,6 +210,9 @@ freqForm.addEventListener('submit', async e => {
 async function loadFrequents() {
   frequents = await fetchFrequents();
   freqTbody.innerHTML = '';
+  frequents.forEach(freq => {
+    renderFrequent(freqTbody, freq, startEditFreq, removeFreq);
+  });
 }
 
 function startEditFreq(freq) {
