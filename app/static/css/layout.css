@@ -213,6 +213,16 @@ body {
   background-color: #e9ecef;
 }
 
+#add-sale {
+  color: #6f42c1;
+  border: 1px solid #6f42c1;
+}
+
+#add-purchase {
+  color: #198754;
+  border: 1px solid #198754;
+}
+
 .form-control-color {
   width: 2rem;
   height: 2rem;
