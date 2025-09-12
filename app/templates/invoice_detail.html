@@ -26,6 +26,11 @@
     </tbody>
   </table>
 </div>
+<div class="text-center mb-4">
+  <a href="/billing.html" class="btn btn-secondary">
+    <i class="bi bi-arrow-left"></i> Volver a facturación
+  </a>
+</div>
 {% if user and user.is_admin %}
 <div class="text-center mb-4">
   <a href="/invoice/{{ invoice.id }}/edit" class="btn btn-primary me-2">
