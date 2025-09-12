@@ -10,6 +10,16 @@ Aplicación web basada en FastAPI para registrar movimientos de dinero y factura
 - **Transacciones frecuentes:** Plantillas para agilizar carga de movimientos repetitivos.
 - **Usuarios y permisos:** Registro de usuarios, inicio de sesión, aprobación por administrador y roles de administrador.
 
+## Guía rápida de uso
+
+1. Regístrate con tu correo y espera la aprobación de un administrador.
+2. Crea tus cuentas indicando nombre, moneda y saldo inicial.
+3. Registra ingresos y egresos desde la sección de transacciones.
+4. Si corresponde, carga facturas de compra y venta en la cuenta de facturación.
+5. Aprovecha las transacciones frecuentes para movimientos repetitivos.
+
+Consulta [USAGE.md](USAGE.md) para una guía más detallada.
+
 ## Cálculos de moneda
 
 - **Saldo de cuentas:** El saldo de cada cuenta se calcula como `saldo_inicial + suma(transacciones)` para la fecha indicada.
