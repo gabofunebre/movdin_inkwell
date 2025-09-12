@@ -2,6 +2,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.encoders import jsonable_encoder
 from pathlib import Path
 from starlette.middleware.sessions import SessionMiddleware
 import os
@@ -150,14 +151,16 @@ async def invoice_detail(
     acc = db.get(Account, inv.account_id)
     symbol = CURRENCY_SYMBOLS.get(acc.currency) if acc else ""
     total = inv.amount + inv.iva_amount
+    invoice_data = jsonable_encoder(inv)
+    account_data = jsonable_encoder(acc) if acc else None
     return templates.TemplateResponse(
         "invoice_detail.html",
         {
             "request": request,
             "title": "Factura",
             "header_title": "Detalle de factura",
-            "invoice": inv,
-            "account": acc,
+            "invoice": invoice_data,
+            "account": account_data,
             "symbol": symbol,
             "total": total,
             "user": user,
