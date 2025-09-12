@@ -165,6 +165,32 @@ async def invoice_detail(
     )
 
 
+@app.get("/invoice/{invoice_id}/edit", response_class=HTMLResponse)
+async def edit_invoice_page(
+    request: Request,
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    inv = db.get(Invoice, invoice_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="Factura no encontrada")
+    acc = db.get(Account, inv.account_id)
+    symbol = CURRENCY_SYMBOLS.get(acc.currency) if acc else ""
+    return templates.TemplateResponse(
+        "invoice_edit.html",
+        {
+            "request": request,
+            "title": "Editar factura",
+            "header_title": "Editar factura",
+            "invoice": inv,
+            "account": acc,
+            "symbol": symbol,
+            "user": user,
+        },
+    )
+
+
 @app.post("/invoice/{invoice_id}/delete", dependencies=[Depends(require_admin)])
 def delete_invoice_page(invoice_id: int, db: Session = Depends(get_db)):
     inv = db.get(Invoice, invoice_id)
