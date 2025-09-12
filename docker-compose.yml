@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:17
-    container_name: IW_movdin-db
+    container_name: IW_mov-din-db
     env_file:
       - .env
     volumes:
