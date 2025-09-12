@@ -163,3 +163,12 @@ async def invoice_detail(
             "user": user,
         },
     )
+
+
+@app.post("/invoice/{invoice_id}/delete", dependencies=[Depends(require_admin)])
+def delete_invoice_page(invoice_id: int, db: Session = Depends(get_db)):
+    inv = db.get(Invoice, invoice_id)
+    if inv:
+        db.delete(inv)
+        db.commit()
+    return RedirectResponse("/billing.html", status_code=302)

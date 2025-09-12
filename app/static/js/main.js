@@ -1,4 +1,11 @@
-import { fetchAccounts, fetchTransactions, createTransaction, fetchFrequents } from './api.js?v=1';
+import {
+  fetchAccounts,
+  fetchTransactions,
+  createTransaction,
+  fetchFrequents,
+  updateTransaction,
+  deleteTransaction
+} from './api.js?v=1';
 import {
   renderTransaction,
   populateAccounts,
@@ -56,7 +63,7 @@ function renderTransactions() {
     }
   });
   tbody.innerHTML = '';
-  filtered.forEach(tx => renderTransaction(tbody, tx, accountMap));
+  filtered.forEach(tx => renderTransaction(tbody, tx, accountMap, openEditModal, confirmDelete));
 }
 
 async function loadMore() {
@@ -74,6 +81,8 @@ function openModal(type) {
   document.getElementById('form-title').textContent = type === 'income' ? 'Nuevo Ingreso' : 'Nuevo Egreso';
   populateAccounts(form.account_id, accounts.filter(a => a.is_active));
   form.dataset.type = type;
+  form.dataset.mode = 'create';
+  delete form.dataset.id;
   alertBox.classList.add('d-none');
   const today = new Date().toISOString().split('T')[0];
   form.date.max = today;
@@ -82,6 +91,41 @@ function openModal(type) {
   descInput.classList.remove('d-none');
   freqSelect.classList.add('d-none');
   txModal.show();
+}
+
+function openEditModal(tx) {
+  form.reset();
+  const isIncome = tx.amount >= 0;
+  document.getElementById('form-title').textContent = isIncome ? 'Editar Ingreso' : 'Editar Egreso';
+  populateAccounts(form.account_id, accounts.filter(a => a.is_active));
+  form.dataset.type = isIncome ? 'income' : 'expense';
+  form.dataset.mode = 'edit';
+  form.dataset.id = tx.id;
+  alertBox.classList.add('d-none');
+  const today = new Date().toISOString().split('T')[0];
+  form.date.max = today;
+  form.date.value = tx.date;
+  freqCheck.checked = false;
+  descInput.classList.remove('d-none');
+  freqSelect.classList.add('d-none');
+  descInput.value = tx.description;
+  form.amount.value = Math.abs(tx.amount);
+  form.account_id.value = tx.account_id;
+  txModal.show();
+}
+
+async function confirmDelete(tx) {
+  if (!confirm('¿Eliminar movimiento?')) return;
+  showOverlay();
+  const result = await deleteTransaction(tx.id);
+  hideOverlay();
+  if (result.ok) {
+    transactions = [];
+    offset = 0;
+    await loadMore();
+  } else {
+    alert(result.error || 'Error al eliminar');
+  }
 }
 
 document.getElementById('add-income').addEventListener('click', () => openModal('income'));
@@ -175,7 +219,12 @@ form.addEventListener('submit', async e => {
   }
 
   showOverlay();
-  const result = await createTransaction(payload);
+  let result;
+  if (form.dataset.mode === 'edit' && form.dataset.id) {
+    result = await updateTransaction(form.dataset.id, payload);
+  } else {
+    result = await createTransaction(payload);
+  }
   hideOverlay();
   alertBox.classList.remove('d-none', 'alert-success', 'alert-danger');
   if (result.ok) {

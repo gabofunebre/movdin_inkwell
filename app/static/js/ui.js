@@ -7,7 +7,7 @@ export function formatCurrency(value) {
   });
 }
 
-export function renderTransaction(tbody, tx, accountMap) {
+export function renderTransaction(tbody, tx, accountMap, onEdit, onDelete) {
   const tr = document.createElement('tr');
   const isIncome = tx.amount >= 0;
   const amount = formatCurrency(Math.abs(tx.amount));
@@ -53,11 +53,11 @@ export function renderTransaction(tbody, tx, accountMap) {
     });
     td.querySelector('[data-action="edit"]').addEventListener('click', e => {
       e.stopPropagation();
-      // TODO: open edit modal and update transaction
+      if (onEdit) onEdit(tx);
     });
     td.querySelector('[data-action="delete"]').addEventListener('click', e => {
       e.stopPropagation();
-      // TODO: call API to delete transaction
+      if (onDelete) onDelete(tx);
     });
   } else {
     tr.addEventListener('click', () => {
