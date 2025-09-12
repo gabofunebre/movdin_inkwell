@@ -113,8 +113,12 @@ def logout(request: Request):
     return RedirectResponse("/login", status_code=302)
 
 
-@router.get("/users", dependencies=[Depends(require_admin)])
-def list_users(request: Request, db: Session = Depends(get_db)):
+@router.get("/users")
+def list_users(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
     pending = db.query(User).filter(User.is_active.is_(False)).all()
     users = db.query(User).filter(User.is_active.is_(True)).all()
     return templates.TemplateResponse(
@@ -125,12 +129,19 @@ def list_users(request: Request, db: Session = Depends(get_db)):
             "header_title": "Usuarios",
             "users": users,
             "pending": pending,
+            "user": current_user,
         },
     )
 
 
-@router.post("/users/{user_id}/delete", dependencies=[Depends(require_admin)])
-def delete_user(user_id: int, db: Session = Depends(get_db)):
+@router.post("/users/{user_id}/delete")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    if user_id == current_user.id:
+        return RedirectResponse("/users", status_code=302)
     user = db.get(User, user_id)
     if user:
         db.delete(user)
@@ -148,8 +159,14 @@ def approve_user(user_id: int, db: Session = Depends(get_db)):
     return RedirectResponse("/users", status_code=302)
 
 
-@router.post("/users/{user_id}/toggle", dependencies=[Depends(require_admin)])
-def toggle_admin(user_id: int, db: Session = Depends(get_db)):
+@router.post("/users/{user_id}/toggle")
+def toggle_admin(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    if user_id == current_user.id:
+        return RedirectResponse("/users", status_code=302)
     user = db.get(User, user_id)
     if user:
         user.is_admin = not user.is_admin
