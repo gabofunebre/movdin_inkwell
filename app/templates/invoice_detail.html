@@ -22,6 +22,9 @@
       {% if invoice.iibb_amount %}
       <tr><th>SIRCREB % {{ invoice.iibb_percent }}</th><td class="amount">{{ symbol }} {{ invoice.iibb_amount|money }}</td></tr>
       {% endif %}
+      {% if invoice.type == 'purchase' %}
+      <tr><th>Retenciones y otros</th><td class="amount">{{ symbol }} {{ invoice.retenciones|money }}</td></tr>
+      {% endif %}
       <tr class="total"><th>Total</th><td class="amount">{{ symbol }} {{ total|money }}</td></tr>
     </tbody>
   </table>
@@ -90,6 +93,15 @@
               <div class="tax-field tax-field-amount">
                 <span class="tax-symbol tax-symbol-currency">$</span>
                 <input type="text" name="iva_amount" class="form-control tax-amount text-end" aria-label="Monto de IVA">
+              </div>
+            </div>
+          </div>
+          <div id="ret-row" class="mb-3 d-none">
+            <div class="tax-line">
+              <span class="form-label tax-label mb-0 text-end">Retenciones y otros</span>
+              <div class="tax-field tax-field-amount">
+                <span class="tax-symbol tax-symbol-currency">$</span>
+                <input type="text" name="retenciones" class="form-control tax-amount text-end" aria-label="Monto de retenciones y otros">
               </div>
             </div>
           </div>

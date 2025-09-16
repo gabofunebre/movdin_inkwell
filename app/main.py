@@ -150,7 +150,7 @@ async def invoice_detail(
         raise HTTPException(status_code=404, detail="Factura no encontrada")
     acc = db.get(Account, inv.account_id)
     symbol = CURRENCY_SYMBOLS.get(acc.currency) if acc else ""
-    total = inv.amount + inv.iva_amount
+    total = inv.amount + inv.iva_amount + inv.retenciones
     invoice_data = jsonable_encoder(inv)
     account_data = jsonable_encoder(acc) if acc else None
     return templates.TemplateResponse(

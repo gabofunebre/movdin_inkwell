@@ -116,6 +116,8 @@ const ivaAmountInput = form.iva_amount;
 const iibbPercentInput = form.iibb_percent;
 const iibbAmountInput = form.iibb_amount;
 const iibbRow = document.getElementById('iibb-row');
+const retRow = document.getElementById('ret-row');
+const retencionesInput = form.retenciones;
 const billingAccountLabel = document.getElementById('billing-account');
 
 const modalEl = document.getElementById('invModal');
@@ -195,17 +197,28 @@ function populateForm(inv, acc) {
     iibbPercentInput.value = iibbPercent;
     iibbAmountInput.value = formatTaxAmount(iibbAmount);
   }
+  if (retencionesInput) {
+    const retAmount = parseDecimal(inv.retenciones ?? 0);
+    retencionesInput.value = formatTaxAmount(retAmount);
+    retencionesInput.disabled = inv.type !== 'purchase';
+  }
   form.account_id.value = inv.account_id ?? form.account_id.value;
   if (billingAccountLabel && acc) {
     billingAccountLabel.textContent = acc.name || '';
     billingAccountLabel.style.color = acc.color || '';
   }
   const isPurchase = inv.type === 'purchase';
+  if (retRow) {
+    retRow.classList.toggle('d-none', !isPurchase);
+  }
   if (iibbRow) {
     iibbRow.classList.toggle('d-none', isPurchase);
   }
   if (iibbPercentInput) {
     iibbPercentInput.disabled = isPurchase;
+  }
+  if (retencionesInput && !isPurchase) {
+    retencionesInput.value = formatTaxAmount(0);
   }
   if (iibbAmountInput) {
     iibbAmountInput.disabled = isPurchase;
@@ -242,6 +255,7 @@ if (modalEl && invoice) {
     iva_amount: parseDecimal(ivaAmountInput.value),
     iibb_percent: iibbPercentInput ? parseDecimal(iibbPercentInput.value) : 0,
     iibb_amount: iibbAmountInput ? parseDecimal(iibbAmountInput.value) : 0,
+    retenciones: retencionesInput ? parseDecimal(retencionesInput.value) : 0,
     account_id: Number(form.account_id.value)
   };
   populateForm(fallback, account);
@@ -349,6 +363,19 @@ if (iibbAmountInput) {
   });
 }
 
+if (retencionesInput) {
+  retencionesInput.addEventListener('input', () => {
+    if (retencionesInput.disabled) return;
+    sanitizeDecimalInput(retencionesInput);
+  });
+
+  retencionesInput.addEventListener('blur', () => {
+    if (retencionesInput.disabled || !retencionesInput.value.trim()) return;
+    const value = getAmountValue(retencionesInput);
+    retencionesInput.value = formatTaxAmount(value);
+  });
+}
+
 form.addEventListener('submit', async e => {
   e.preventDefault();
   if (!form.reportValidity()) return;
@@ -360,6 +387,7 @@ form.addEventListener('submit', async e => {
   const iibbPercentValue =
     type === 'purchase' ? 0 : roundToTwo(Math.abs(getPercentValue(iibbPercentInput)));
   const iibbAmountValue = roundToTwo(getAmountValue(iibbAmountInput));
+  const retencionesValue = type === 'purchase' ? roundToTwo(getAmountValue(retencionesInput)) : 0;
   const payload = {
     date: data.get('date'),
     number: data.get('number'),
@@ -368,7 +396,8 @@ form.addEventListener('submit', async e => {
     account_id: Number(data.get('account_id')),
     type,
     iva_percent: ivaPercentValue,
-    iibb_percent: type === 'purchase' ? 0 : iibbPercentValue
+    iibb_percent: type === 'purchase' ? 0 : iibbPercentValue,
+    retenciones: retencionesValue
   };
   if (isManualPercent(ivaPercentInput)) {
     payload.iva_amount = ivaAmountValue;
@@ -377,6 +406,9 @@ form.addEventListener('submit', async e => {
     payload.iibb_amount = 0;
   } else if (isManualPercent(iibbPercentInput)) {
     payload.iibb_amount = iibbAmountValue;
+  }
+  if (type !== 'purchase') {
+    payload.retenciones = 0;
   }
   const today = new Date().toISOString().split('T')[0];
   if (payload.date > today) {

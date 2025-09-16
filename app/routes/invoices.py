@@ -45,6 +45,12 @@ def create_invoice(payload: InvoiceCreate, db: Session = Depends(get_db)):
             if payload.iibb_amount is not None
             else Decimal("0")
         )
+    if payload.retenciones is not None:
+        retenciones = abs(payload.retenciones).quantize(Decimal("0.01"))
+    else:
+        retenciones = Decimal("0")
+    if payload.type == InvoiceType.SALE:
+        retenciones = Decimal("0")
     inv = Invoice(
         account_id=payload.account_id,
         date=payload.date,
@@ -55,6 +61,7 @@ def create_invoice(payload: InvoiceCreate, db: Session = Depends(get_db)):
         iva_amount=iva_amount,
         iibb_percent=iibb_percent,
         iibb_amount=iibb_amount,
+        retenciones=retenciones,
         type=payload.type,
     )
     db.add(inv)
@@ -104,6 +111,12 @@ def update_invoice(invoice_id: int, payload: InvoiceCreate, db: Session = Depend
             if payload.iibb_amount is not None
             else Decimal("0")
         )
+    if payload.retenciones is not None:
+        retenciones = abs(payload.retenciones).quantize(Decimal("0.01"))
+    else:
+        retenciones = Decimal("0")
+    if payload.type == InvoiceType.SALE:
+        retenciones = Decimal("0")
     for field in [
         "account_id",
         "date",
@@ -117,6 +130,7 @@ def update_invoice(invoice_id: int, payload: InvoiceCreate, db: Session = Depend
     inv.iva_amount = iva_amount
     inv.iibb_percent = iibb_percent
     inv.iibb_amount = iibb_amount
+    inv.retenciones = retenciones
     db.add(inv)
     db.commit()
     db.refresh(inv)
