@@ -18,9 +18,9 @@
       <tr><th>Cuenta</th><td style="color:{{ account.color if account else '' }}">{{ account.name if account else '' }}</td></tr>
       <tr><th>Concepto</th><td class="description">{{ invoice.description }}</td></tr>
       <tr><th>Monto sin impuesto</th><td class="amount">{{ symbol }} {{ invoice.amount|money }}</td></tr>
-      <tr><th>IVA {{ invoice.iva_percent }}%</th><td class="amount">{{ symbol }} {{ invoice.iva_amount|money }}</td></tr>
+      <tr><th>IVA % {{ invoice.iva_percent }}</th><td class="amount">{{ symbol }} {{ invoice.iva_amount|money }}</td></tr>
       {% if invoice.iibb_amount %}
-      <tr><th>SIRCREB {{ invoice.iibb_percent }}%</th><td class="amount">{{ symbol }} {{ invoice.iibb_amount|money }}</td></tr>
+      <tr><th>SIRCREB % {{ invoice.iibb_percent }}</th><td class="amount">{{ symbol }} {{ invoice.iibb_amount|money }}</td></tr>
       {% endif %}
       <tr class="total"><th>Total</th><td class="amount">{{ symbol }} {{ total|money }}</td></tr>
     </tbody>
@@ -73,19 +73,27 @@
           <div class="mb-3">
             <div class="tax-line">
               <span class="form-label tax-label mb-0">IVA</span>
-              <span class="tax-symbol tax-symbol-percent">%</span>
-              <input type="number" step="0.01" name="iva_percent" class="form-control tax-percent text-end" value="21">
-              <span class="tax-symbol tax-symbol-currency">$</span>
-              <input type="text" name="iva_amount" class="form-control tax-amount text-end" readonly>
+              <div class="tax-field">
+                <span class="tax-symbol tax-symbol-percent">%</span>
+                <input type="number" step="0.01" name="iva_percent" class="form-control tax-percent text-end" value="21">
+              </div>
+              <div class="tax-field tax-field-amount">
+                <span class="tax-symbol tax-symbol-currency">$</span>
+                <input type="text" name="iva_amount" class="form-control tax-amount text-end" readonly>
+              </div>
             </div>
           </div>
           <div id="iibb-row" class="mb-3 d-none">
             <div class="tax-line">
               <span class="form-label tax-label mb-0">SIRCREB</span>
-              <span class="tax-symbol tax-symbol-percent">%</span>
-              <input type="number" step="0.01" name="iibb_percent" class="form-control tax-percent text-end" value="3">
-              <span class="tax-symbol tax-symbol-currency">$</span>
-              <input type="text" name="iibb_amount" class="form-control tax-amount text-end" readonly>
+              <div class="tax-field">
+                <span class="tax-symbol tax-symbol-percent">%</span>
+                <input type="number" step="0.01" name="iibb_percent" class="form-control tax-percent text-end" value="3">
+              </div>
+              <div class="tax-field tax-field-amount">
+                <span class="tax-symbol tax-symbol-currency">$</span>
+                <input type="text" name="iibb_amount" class="form-control tax-amount text-end" readonly>
+              </div>
             </div>
           </div>
           <div class="mb-3">

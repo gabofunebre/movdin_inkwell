@@ -26,19 +26,27 @@
     <div class="mb-3">
       <div class="tax-line">
         <span class="form-label tax-label mb-0">IVA</span>
-        <span class="tax-symbol tax-symbol-percent">%</span>
-        <input type="number" step="0.01" name="iva_percent" class="form-control tax-percent text-end" value="{{ invoice.iva_percent }}">
-        <span class="tax-symbol tax-symbol-currency">$</span>
-        <input type="text" name="iva_amount" class="form-control tax-amount text-end" value="{{ invoice.iva_amount }}" readonly>
+        <div class="tax-field">
+          <span class="tax-symbol tax-symbol-percent">%</span>
+          <input type="number" step="0.01" name="iva_percent" class="form-control tax-percent text-end" value="{{ invoice.iva_percent }}">
+        </div>
+        <div class="tax-field tax-field-amount">
+          <span class="tax-symbol tax-symbol-currency">$</span>
+          <input type="text" name="iva_amount" class="form-control tax-amount text-end" value="{{ invoice.iva_amount }}" readonly>
+        </div>
       </div>
     </div>
     <div id="iibb-row" class="mb-3{% if invoice.type == 'purchase' %} d-none{% endif %}">
       <div class="tax-line">
         <span class="form-label tax-label mb-0">SIRCREB</span>
-        <span class="tax-symbol tax-symbol-percent">%</span>
-        <input type="number" step="0.01" name="iibb_percent" class="form-control tax-percent text-end" value="{{ invoice.iibb_percent }}">
-        <span class="tax-symbol tax-symbol-currency">$</span>
-        <input type="text" name="iibb_amount" class="form-control tax-amount text-end" value="{{ invoice.iibb_amount }}" readonly>
+        <div class="tax-field">
+          <span class="tax-symbol tax-symbol-percent">%</span>
+          <input type="number" step="0.01" name="iibb_percent" class="form-control tax-percent text-end" value="{{ invoice.iibb_percent }}">
+        </div>
+        <div class="tax-field tax-field-amount">
+          <span class="tax-symbol tax-symbol-currency">$</span>
+          <input type="text" name="iibb_amount" class="form-control tax-amount text-end" value="{{ invoice.iibb_amount }}" readonly>
+        </div>
       </div>
     </div>
     <div class="mb-3">
