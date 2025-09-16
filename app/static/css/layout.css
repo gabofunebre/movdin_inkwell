@@ -5,13 +5,12 @@ body {
 .tax-line {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
   flex-wrap: nowrap;
-
 }
 
 .tax-label {
   min-width: 3.5rem;
+  margin-right: 0.75rem;
 }
 
 .tax-line .form-control {
@@ -28,9 +27,17 @@ body {
   min-width: 0;
 }
 
-.tax-symbol,
-.tax-separator {
+.tax-symbol {
   font-weight: 600;
+}
+
+.tax-symbol-percent {
+  margin-right: 0.5rem;
+}
+
+.tax-symbol-currency {
+  margin-left: 5ch;
+  margin-right: 0.5rem;
 }
 
 #table-container {
