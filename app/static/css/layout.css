@@ -9,8 +9,9 @@ body {
 }
 
 .tax-label {
-  min-width: 3.5rem;
+  flex: 0 0 7rem;
   margin-right: 0.75rem;
+  text-align: right;
 }
 
 .tax-field {
