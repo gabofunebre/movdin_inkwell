@@ -1,4 +1,4 @@
-from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy import MetaData, create_engine, text, inspect
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 import os
@@ -24,9 +24,60 @@ def init_db() -> None:
 
     with engine.begin() as conn:
         if engine.dialect.name == "postgresql":
-            conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{SCHEMA_NAME}"'))
+            conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{_quote_identifier(SCHEMA_NAME)}"'))
 
     Base.metadata.create_all(bind=engine)
+    _apply_schema_upgrades()
+
+
+def _quote_identifier(identifier: str) -> str:
+    """Return a double-quoted identifier safe for raw SQL usage."""
+
+    return identifier.replace('"', '""')
+
+
+def _qualified_table(name: str) -> str:
+    """Return a table reference qualified with the configured schema when needed."""
+
+    if engine.dialect.name == "postgresql":
+        return f'"{_quote_identifier(SCHEMA_NAME)}"."{_quote_identifier(name)}"'
+    return name
+
+
+def _apply_schema_upgrades() -> None:
+    """Apply lightweight schema migrations required by the application."""
+
+    schema = SCHEMA_NAME if engine.dialect.name == "postgresql" else None
+
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        if "invoices" not in inspector.get_table_names(schema=schema):
+            return
+
+        columns = {col["name"] for col in inspector.get_columns("invoices", schema=schema)}
+        if "retenciones" not in columns:
+            table = _qualified_table("invoices")
+            if engine.dialect.name == "postgresql":
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} "
+                        "ADD COLUMN retenciones NUMERIC(12, 2) DEFAULT 0 NOT NULL"
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} "
+                        "ADD COLUMN retenciones NUMERIC(12, 2) DEFAULT 0"
+                    )
+                )
+
+            conn.execute(
+                text(
+                    f"UPDATE {table} SET retenciones = 0 "
+                    "WHERE retenciones IS NULL"
+                )
+            )
 
 def get_db():
     db = SessionLocal()
