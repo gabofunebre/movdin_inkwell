@@ -175,7 +175,14 @@ function populateForm(inv, acc) {
   form.date.value = inv.date || '';
   form.number.value = inv.number || '';
   form.description.value = inv.description || '';
-  amountInput.value = toNumberString(inv.amount);
+  const amountRaw = inv.amount ?? '';
+  const hasAmountValue = String(amountRaw).trim() !== '';
+  if (hasAmountValue) {
+    const baseAmount = Math.abs(parseDecimal(amountRaw));
+    amountInput.value = formatTaxAmount(baseAmount);
+  } else {
+    amountInput.value = '';
+  }
   const ivaPercent = toNumberString(inv.iva_percent);
   const ivaAmount = parseDecimal(inv.iva_amount ?? 0);
   clearManualPercent(ivaPercentInput, ivaAmountInput, ivaPercent);
@@ -241,7 +248,14 @@ if (modalEl && invoice) {
 }
 
 amountInput.addEventListener('input', () => {
+  sanitizeDecimalInput(amountInput);
   recalcTaxes();
+});
+
+amountInput.addEventListener('blur', () => {
+  if (!amountInput.value.trim()) return;
+  const value = Math.abs(parseDecimal(amountInput.value));
+  amountInput.value = formatTaxAmount(value);
 });
 
 ivaPercentInput.addEventListener('focus', () => {
