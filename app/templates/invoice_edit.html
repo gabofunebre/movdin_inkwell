@@ -40,6 +40,15 @@
         </div>
       </div>
     </div>
+    <div id="ret-row" class="mb-3{% if invoice.type != 'purchase' %} d-none{% endif %}">
+      <div class="tax-line">
+        <span class="form-label tax-label mb-0">Retenciones y otros</span>
+        <div class="tax-field tax-field-amount">
+          <span class="tax-symbol tax-symbol-currency">$</span>
+          <input type="text" name="retenciones" class="form-control tax-amount text-end" value="{{ invoice.retenciones }}" aria-label="Monto de retenciones y otros">
+        </div>
+      </div>
+    </div>
     <div id="iibb-row" class="mb-3{% if invoice.type == 'purchase' %} d-none{% endif %}">
       <div class="tax-line">
         <span class="form-label tax-label mb-0">SIRCREB</span>

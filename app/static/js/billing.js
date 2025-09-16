@@ -20,6 +20,8 @@ const ivaAmountInput = form.iva_amount;
 const iibbPercentInput = form.iibb_percent;
 const iibbAmountInput = form.iibb_amount;
 const iibbRow = document.getElementById('iibb-row');
+const retRow = document.getElementById('ret-row');
+const retencionesInput = form.retenciones;
 const billingAccountLabel = document.getElementById('billing-account');
 const defaultIvaPercent = ivaPercentInput.value || '21';
 const defaultIibbPercent = iibbPercentInput.value || '3';
@@ -162,8 +164,12 @@ function renderInvoices() {
           : b.description.localeCompare(a.description);
       case 4:
         // Comparar por monto total (importe sin impuestos + IVA)
-        const totalWithIvaA = Math.abs(Number(a.amount) + Number(a.iva_amount));
-        const totalWithIvaB = Math.abs(Number(b.amount) + Number(b.iva_amount));
+        const totalWithIvaA = Math.abs(
+          Number(a.amount) + Number(a.iva_amount) + Number(a.retenciones || 0)
+        );
+        const totalWithIvaB = Math.abs(
+          Number(b.amount) + Number(b.iva_amount) + Number(b.retenciones || 0)
+        );
         return sortAsc
           ? totalWithIvaA - totalWithIvaB
           : totalWithIvaB - totalWithIvaA;
@@ -298,6 +304,17 @@ iibbAmountInput.addEventListener('blur', () => {
   iibbAmountInput.value = formatTaxAmount(value);
 });
 
+retencionesInput.addEventListener('input', () => {
+  if (retencionesInput.disabled) return;
+  sanitizeDecimalInput(retencionesInput);
+});
+
+retencionesInput.addEventListener('blur', () => {
+  if (retencionesInput.disabled || !retencionesInput.value.trim()) return;
+  const value = getAmountValue(retencionesInput);
+  retencionesInput.value = formatTaxAmount(value);
+});
+
 async function loadMore() {
   if (loading) return;
   loading = true;
@@ -329,11 +346,19 @@ function openModal(type) {
   form.date.max = today;
   form.date.value = today;
   const isPurchase = type === 'purchase';
+  if (retRow) {
+    retRow.classList.toggle('d-none', !isPurchase);
+  }
+  retencionesInput.disabled = !isPurchase;
+  retencionesInput.value = formatTaxAmount(0);
   iibbRow.classList.toggle('d-none', isPurchase);
   iibbPercentInput.disabled = isPurchase;
   iibbAmountInput.disabled = isPurchase;
   iibbPercentInput.value = isPurchase ? '0' : defaultIibbPercent;
   iibbAmountInput.value = formatTaxAmount(0);
+  if (!isPurchase) {
+    retencionesInput.value = formatTaxAmount(0);
+  }
   recalcTaxes();
   invModal.show();
 }
@@ -384,6 +409,7 @@ container.addEventListener('scroll', () => {
     const ivaAmount = roundToTwo(getAmountValue(ivaAmountInput));
     const iibbPercentValue = isPurchase ? 0 : roundToTwo(Math.abs(getPercentValue(iibbPercentInput)));
     const iibbAmount = roundToTwo(getAmountValue(iibbAmountInput));
+    const retencionesAmount = isPurchase ? roundToTwo(getAmountValue(retencionesInput)) : 0;
     const payload = {
       date: data.get('date'),
       number: data.get('number'),
@@ -392,7 +418,8 @@ container.addEventListener('scroll', () => {
       account_id: billingAccount.id,
       type: form.dataset.type,
       iva_percent: ivaPercent,
-      iibb_percent: isPurchase ? 0 : iibbPercentValue
+      iibb_percent: isPurchase ? 0 : iibbPercentValue,
+      retenciones: retencionesAmount
     };
     if (isManualPercent(ivaPercentInput)) {
       payload.iva_amount = ivaAmount;

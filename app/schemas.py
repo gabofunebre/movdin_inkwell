@@ -51,6 +51,7 @@ class InvoiceCreate(BaseModel):
     iibb_percent: Decimal = Decimal("3")
     iva_amount: Decimal | None = None
     iibb_amount: Decimal | None = None
+    retenciones: Decimal = Decimal("0")
     type: InvoiceType
 
 
@@ -65,6 +66,7 @@ class InvoiceOut(BaseModel):
     iva_amount: Decimal
     iibb_percent: Decimal
     iibb_amount: Decimal
+    retenciones: Decimal
     type: InvoiceType
 
     class Config:
@@ -102,6 +104,7 @@ class AccountSummary(BaseModel):
     iva_purchases: Decimal | None = None
     iva_sales: Decimal | None = None
     iibb: Decimal | None = None
+    retenciones: Decimal | None = None
 
 
 class UserCreate(BaseModel):
