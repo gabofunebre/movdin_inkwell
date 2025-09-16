@@ -37,48 +37,48 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label">Fecha
-                <input type="date" name="date" class="form-control" required>
-              </label>
+            <div class="row g-3 mb-3">
+              <div class="col-sm-6">
+                <label class="form-label w-100">Fecha
+                  <input type="date" name="date" class="form-control" required>
+                </label>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label w-100">Número
+                  <input type="text" name="number" class="form-control" required>
+                </label>
+              </div>
             </div>
             <div class="mb-3">
-              <label class="form-label">Número
-                <input type="text" name="number" class="form-control" required>
-              </label>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Concepto
+              <label class="form-label w-100">Concepto
                 <input type="text" name="description" class="form-control" required>
               </label>
             </div>
+            <div class="row g-3 justify-content-end mb-3">
+              <div class="col-sm-6 ms-auto">
+                <label class="form-label w-100">Total sin impuesto
+                  <input type="number" step="0.01" name="amount" class="form-control text-end" required>
+                </label>
+              </div>
+            </div>
             <div class="mb-3">
-              <label class="form-label">Total sin impuesto
-                <input type="number" step="0.01" name="amount" class="form-control" required>
-              </label>
-            </div>
-            <div class="row">
-              <div class="col-6 mb-3">
-                <label class="form-label">IVA %
-                  <input type="number" step="0.01" name="iva_percent" class="form-control" value="21">
-                </label>
-              </div>
-              <div class="col-6 mb-3">
-                <label class="form-label">IVA $
-                  <input type="text" name="iva_amount" class="form-control" readonly>
-                </label>
+              <div class="tax-line">
+                <span class="form-label tax-label mb-0">IVA</span>
+                <input type="number" step="0.01" name="iva_percent" class="form-control tax-percent text-end" value="21" aria-label="IVA %">
+                <span class="tax-symbol">%</span>
+                <span class="tax-separator">-</span>
+                <span class="tax-symbol">$</span>
+                <input type="text" name="iva_amount" class="form-control tax-amount text-end" readonly aria-label="IVA $">
               </div>
             </div>
-            <div id="iibb-row" class="row d-none">
-              <div class="col-6 mb-3">
-                <label class="form-label">IIBB %
-                  <input type="number" step="0.01" name="iibb_percent" class="form-control" value="3">
-                </label>
-              </div>
-              <div class="col-6 mb-3">
-                <label class="form-label">IIBB $
-                  <input type="text" name="iibb_amount" class="form-control" readonly>
-                </label>
+            <div id="iibb-row" class="mb-3 d-none">
+              <div class="tax-line">
+                <span class="form-label tax-label mb-0">IIBB</span>
+                <input type="number" step="0.01" name="iibb_percent" class="form-control tax-percent text-end" value="3" aria-label="IIBB %">
+                <span class="tax-symbol">%</span>
+                <span class="tax-separator">-</span>
+                <span class="tax-symbol">$</span>
+                <input type="text" name="iibb_amount" class="form-control tax-amount text-end" readonly aria-label="IIBB $">
               </div>
             </div>
             <div class="mb-3">

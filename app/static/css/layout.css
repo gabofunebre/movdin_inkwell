@@ -2,6 +2,31 @@ body {
   font-family: sans-serif;
 }
 
+.tax-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tax-label {
+  min-width: 3.5rem;
+}
+
+.tax-line .tax-percent {
+  flex: 0 0 6rem;
+}
+
+.tax-line .tax-amount {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+}
+
+.tax-symbol,
+.tax-separator {
+  font-weight: 600;
+}
+
 #table-container {
   overflow-y: auto;
   padding: 1rem 4rem;
