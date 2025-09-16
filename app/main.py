@@ -180,14 +180,16 @@ async def edit_invoice_page(
         raise HTTPException(status_code=404, detail="Factura no encontrada")
     acc = db.get(Account, inv.account_id)
     symbol = CURRENCY_SYMBOLS.get(acc.currency) if acc else ""
+    invoice_data = jsonable_encoder(inv)
+    account_data = jsonable_encoder(acc) if acc else None
     return templates.TemplateResponse(
         "invoice_edit.html",
         {
             "request": request,
             "title": "Editar factura",
             "header_title": "Editar factura",
-            "invoice": inv,
-            "account": acc,
+            "invoice": invoice_data,
+            "account": account_data,
             "symbol": symbol,
             "user": user,
         },

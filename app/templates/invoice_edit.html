@@ -3,36 +3,40 @@
 {% block content %}
 <div class="container mt-4" style="max-width:500px;">
   <form id="inv-form" data-type="{{ invoice.type }}" data-invoice-id="{{ invoice.id }}">
-    <div class="mb-3">
-      <label class="form-label">Fecha
-        <input type="date" name="date" class="form-control" value="{{ invoice.date }}" required>
-      </label>
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6">
+        <label class="form-label w-100">Fecha
+          <input type="date" name="date" class="form-control" value="{{ invoice.date }}" required>
+        </label>
+      </div>
+      <div class="col-sm-6">
+        <label class="form-label w-100">Número
+          <input type="text" name="number" class="form-control" value="{{ invoice.number }}" required>
+        </label>
+      </div>
     </div>
     <div class="mb-3">
-      <label class="form-label">Número
-        <input type="text" name="number" class="form-control" value="{{ invoice.number }}" required>
-      </label>
-    </div>
-    <div class="mb-3">
-      <label class="form-label">Concepto
+      <label class="form-label w-100">Concepto
         <input type="text" name="description" class="form-control" value="{{ invoice.description }}" required>
       </label>
     </div>
-    <div class="mb-3">
-      <label class="form-label">Total sin impuesto
-        <input type="number" step="0.01" name="amount" class="form-control" value="{{ invoice.amount }}" required>
-      </label>
+    <div class="row g-3 justify-content-end mb-3">
+      <div class="col-sm-6 ms-auto">
+        <label class="form-label w-100">Total sin impuesto
+          <input type="number" step="0.01" name="amount" class="form-control text-end" value="{{ invoice.amount }}" required>
+        </label>
+      </div>
     </div>
     <div class="mb-3">
       <div class="tax-line">
         <span class="form-label tax-label mb-0">IVA</span>
         <div class="tax-field">
           <span class="tax-symbol tax-symbol-percent">%</span>
-          <input type="number" step="0.01" name="iva_percent" class="form-control tax-percent text-end" value="{{ invoice.iva_percent }}">
+          <input type="number" step="0.01" name="iva_percent" class="form-control tax-percent text-end" value="{{ invoice.iva_percent }}" aria-label="Porcentaje de IVA">
         </div>
         <div class="tax-field tax-field-amount">
           <span class="tax-symbol tax-symbol-currency">$</span>
-          <input type="text" name="iva_amount" class="form-control tax-amount text-end" value="{{ invoice.iva_amount }}" readonly>
+          <input type="text" name="iva_amount" class="form-control tax-amount text-end" value="{{ invoice.iva_amount }}" aria-label="Monto de IVA">
         </div>
       </div>
     </div>
@@ -41,11 +45,11 @@
         <span class="form-label tax-label mb-0">SIRCREB</span>
         <div class="tax-field">
           <span class="tax-symbol tax-symbol-percent">%</span>
-          <input type="number" step="0.01" name="iibb_percent" class="form-control tax-percent text-end" value="{{ invoice.iibb_percent }}">
+          <input type="number" step="0.01" name="iibb_percent" class="form-control tax-percent text-end" value="{{ invoice.iibb_percent }}" aria-label="Porcentaje de SIRCREB">
         </div>
         <div class="tax-field tax-field-amount">
           <span class="tax-symbol tax-symbol-currency">$</span>
-          <input type="text" name="iibb_amount" class="form-control tax-amount text-end" value="{{ invoice.iibb_amount }}" readonly>
+          <input type="text" name="iibb_amount" class="form-control tax-amount text-end" value="{{ invoice.iibb_amount }}" aria-label="Monto de SIRCREB">
         </div>
       </div>
     </div>
@@ -64,5 +68,9 @@
 {% endblock %}
 
 {% block scripts %}
+<script id="invoice-data" type="application/json">{{ invoice|tojson }}</script>
+{% if account %}
+<script id="account-data" type="application/json">{{ account|tojson }}</script>
+{% endif %}
 <script type="module" src="/static/js/invoice_edit.js?v=1"></script>
 {% endblock %}

@@ -1,100 +1,393 @@
 import { updateInvoice } from './api.js?v=1';
 import { showOverlay, hideOverlay, formatCurrency } from './ui.js?v=1';
 
+function sanitizeDecimalInput(input) {
+  const cleaned = input.value.replace(/[^0-9,.-]/g, '');
+  if (cleaned !== input.value) {
+    input.value = cleaned;
+  }
+}
+
+function parseDecimal(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (value === null || value === undefined) return 0;
+  const str = value.toString().trim();
+  if (!str) return 0;
+  const sanitized = str.replace(/[^0-9,.-]/g, '');
+  if (!sanitized) return 0;
+  const commaIndex = sanitized.lastIndexOf(',');
+  const dotIndex = sanitized.lastIndexOf('.');
+  let normalized = sanitized;
+  if (commaIndex !== -1 && dotIndex !== -1) {
+    if (commaIndex > dotIndex) {
+      normalized = sanitized.replace(/\./g, '').replace(',', '.');
+    } else {
+      normalized = sanitized.replace(/,/g, '');
+    }
+  } else if (commaIndex !== -1) {
+    normalized = sanitized.replace(',', '.');
+  } else if (dotIndex !== -1) {
+    const segments = sanitized.split('.');
+    if (segments.length > 2) {
+      const decimalPart = segments.pop();
+      normalized = segments.join('') + '.' + decimalPart;
+    } else {
+      normalized = sanitized;
+    }
+  }
+  if (normalized.includes('-')) {
+    const negative = normalized.trim().startsWith('-');
+    normalized = normalized.replace(/-/g, '');
+    if (negative) {
+      normalized = '-' + normalized;
+    }
+  }
+  const num = Number(normalized);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function formatTaxAmount(value) {
+  const amount = Number.isFinite(value) ? value : 0;
+  return formatCurrency(amount);
+}
+
+function isManualPercent(percentInput) {
+  return percentInput?.dataset.manual === 'true';
+}
+
+function setManualPercent(percentInput, amountInput, percentValue) {
+  if (!percentInput || !amountInput) return;
+  percentInput.dataset.manual = 'true';
+  percentInput.dataset.manualPercent = String(percentValue ?? 0);
+  percentInput.value = 'MOD';
+  amountInput.dataset.manual = 'true';
+}
+
+function clearManualPercent(percentInput, amountInput, fallbackPercent = null) {
+  if (!percentInput || !amountInput) return;
+  let manualStored = null;
+  if (isManualPercent(percentInput)) {
+    manualStored = percentInput.dataset.manualPercent ?? null;
+    delete percentInput.dataset.manual;
+    delete percentInput.dataset.manualPercent;
+  }
+  if (amountInput.dataset.manual === 'true') {
+    delete amountInput.dataset.manual;
+  }
+  if (percentInput.value === 'MOD') {
+    const nextValue = fallbackPercent ?? manualStored;
+    percentInput.value =
+      nextValue !== null && nextValue !== undefined && nextValue !== ''
+        ? String(nextValue)
+        : '';
+  }
+}
+
+function getPercentValue(percentInput) {
+  if (!percentInput) return 0;
+  if (isManualPercent(percentInput)) {
+    return parseDecimal(percentInput.dataset.manualPercent);
+  }
+  return parseDecimal(percentInput.value);
+}
+
+function getAmountValue(amountInput) {
+  if (!amountInput) return 0;
+  return Math.abs(parseDecimal(amountInput.value));
+}
+
+function roundToTwo(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 0;
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+}
+
+const form = document.getElementById('inv-form');
+if (!form) {
+  throw new Error('Invoice form not found');
+}
+
+const alertBox = document.getElementById('inv-alert');
+const amountInput = form.amount;
+const ivaPercentInput = form.iva_percent;
+const ivaAmountInput = form.iva_amount;
+const iibbPercentInput = form.iibb_percent;
+const iibbAmountInput = form.iibb_amount;
+const iibbRow = document.getElementById('iibb-row');
+const billingAccountLabel = document.getElementById('billing-account');
+
 const modalEl = document.getElementById('invModal');
-if (modalEl) {
-  const invModal = new bootstrap.Modal(modalEl);
-  const form = document.getElementById('inv-form');
-  const alertBox = document.getElementById('inv-alert');
-  const amountInput = form.amount;
-  const ivaPercentInput = form.iva_percent;
-  const ivaAmountInput = form.iva_amount;
-  const iibbPercentInput = form.iibb_percent;
-  const iibbAmountInput = form.iibb_amount;
-  const iibbRow = document.getElementById('iibb-row');
-  const billingAccountLabel = document.getElementById('billing-account');
+let invModal = null;
 
-  const invoice = JSON.parse(document.getElementById('invoice-data').textContent);
-  const account = JSON.parse(document.getElementById('account-data').textContent);
+const invoiceDataEl = document.getElementById('invoice-data');
+const accountDataEl = document.getElementById('account-data');
+let invoice = invoiceDataEl ? JSON.parse(invoiceDataEl.textContent) : null;
+const account = accountDataEl ? JSON.parse(accountDataEl.textContent) : null;
 
-  document.getElementById('edit-btn').addEventListener('click', () => {
-    populateForm();
-    invModal.show();
+function recalcTaxes() {
+  const baseAmount = Math.abs(parseDecimal(amountInput.value));
+  const ivaManual = isManualPercent(ivaPercentInput);
+  let ivaAmountValue = getAmountValue(ivaAmountInput);
+  if (!ivaManual) {
+    const ivaPercent = parseDecimal(ivaPercentInput.value);
+    ivaAmountValue = (baseAmount * ivaPercent) / 100;
+    ivaAmountInput.value = formatTaxAmount(ivaAmountValue);
+  } else {
+    const percent = baseAmount ? (ivaAmountValue / baseAmount) * 100 : 0;
+    ivaPercentInput.dataset.manualPercent = String(percent);
+  }
+
+  if (!iibbPercentInput || !iibbAmountInput || iibbPercentInput.disabled) {
+    if (iibbAmountInput) {
+      iibbAmountInput.value = formatTaxAmount(0);
+    }
+    if (iibbPercentInput) {
+      clearManualPercent(iibbPercentInput, iibbAmountInput);
+    }
+    return;
+  }
+
+  const iibbManual = isManualPercent(iibbPercentInput);
+  let iibbAmountValue = getAmountValue(iibbAmountInput);
+  const iibbBase = baseAmount + ivaAmountValue;
+  if (!iibbManual) {
+    const iibbPercent = parseDecimal(iibbPercentInput.value);
+    iibbAmountValue = (iibbBase * iibbPercent) / 100;
+    iibbAmountInput.value = formatTaxAmount(iibbAmountValue);
+  } else {
+    const percent = iibbBase ? (iibbAmountValue / iibbBase) * 100 : 0;
+    iibbPercentInput.dataset.manualPercent = String(percent);
+  }
+}
+
+function toNumberString(value) {
+  if (value === null || value === undefined || value === '') return '';
+  const num = parseDecimal(value);
+  return Number.isFinite(num) ? String(num) : '';
+}
+
+function populateForm(inv, acc) {
+  if (!inv) return;
+  form.dataset.invoiceId = inv.id;
+  form.dataset.type = inv.type;
+  form.date.value = inv.date || '';
+  form.number.value = inv.number || '';
+  form.description.value = inv.description || '';
+  amountInput.value = toNumberString(inv.amount);
+  const ivaPercent = toNumberString(inv.iva_percent);
+  const ivaAmount = parseDecimal(inv.iva_amount ?? 0);
+  clearManualPercent(ivaPercentInput, ivaAmountInput, ivaPercent);
+  ivaPercentInput.value = ivaPercent;
+  ivaAmountInput.value = formatTaxAmount(ivaAmount);
+  if (iibbPercentInput && iibbAmountInput) {
+    const iibbPercent = toNumberString(inv.iibb_percent ?? 0);
+    const iibbAmount = parseDecimal(inv.iibb_amount ?? 0);
+    clearManualPercent(iibbPercentInput, iibbAmountInput, iibbPercent);
+    iibbPercentInput.value = iibbPercent;
+    iibbAmountInput.value = formatTaxAmount(iibbAmount);
+  }
+  form.account_id.value = inv.account_id ?? form.account_id.value;
+  if (billingAccountLabel && acc) {
+    billingAccountLabel.textContent = acc.name || '';
+    billingAccountLabel.style.color = acc.color || '';
+  }
+  const isPurchase = inv.type === 'purchase';
+  if (iibbRow) {
+    iibbRow.classList.toggle('d-none', isPurchase);
+  }
+  if (iibbPercentInput) {
+    iibbPercentInput.disabled = isPurchase;
+  }
+  if (iibbAmountInput) {
+    iibbAmountInput.disabled = isPurchase;
+    if (isPurchase) {
+      iibbAmountInput.value = formatTaxAmount(0);
+    }
+  }
+  const today = new Date().toISOString().split('T')[0];
+  form.date.max = today;
+  alertBox.classList.add('d-none');
+  recalcTaxes();
+}
+
+if (modalEl && invoice) {
+  invModal = new bootstrap.Modal(modalEl);
+  const editBtn = document.getElementById('edit-btn');
+  if (editBtn) {
+    editBtn.addEventListener('click', () => {
+      populateForm(invoice, account);
+      invModal.show();
+    });
+  }
+} else if (invoice) {
+  populateForm(invoice, account);
+} else {
+  const fallback = {
+    id: form.dataset.invoiceId,
+    type: form.dataset.type,
+    date: form.date.value,
+    number: form.number.value,
+    description: form.description.value,
+    amount: parseDecimal(form.amount.value),
+    iva_percent: parseDecimal(ivaPercentInput.value),
+    iva_amount: parseDecimal(ivaAmountInput.value),
+    iibb_percent: iibbPercentInput ? parseDecimal(iibbPercentInput.value) : 0,
+    iibb_amount: iibbAmountInput ? parseDecimal(iibbAmountInput.value) : 0,
+    account_id: Number(form.account_id.value)
+  };
+  populateForm(fallback, account);
+}
+
+amountInput.addEventListener('input', () => {
+  recalcTaxes();
+});
+
+ivaPercentInput.addEventListener('focus', () => {
+  if (!isManualPercent(ivaPercentInput)) return;
+  const percent = parseDecimal(ivaPercentInput.dataset.manualPercent);
+  ivaPercentInput.value = percent ? percent.toFixed(2) : '0.00';
+  ivaPercentInput.select();
+});
+
+ivaPercentInput.addEventListener('blur', () => {
+  if (isManualPercent(ivaPercentInput)) {
+    ivaPercentInput.value = 'MOD';
+  }
+});
+
+ivaPercentInput.addEventListener('input', () => {
+  sanitizeDecimalInput(ivaPercentInput);
+  if (isManualPercent(ivaPercentInput)) {
+    clearManualPercent(ivaPercentInput, ivaAmountInput);
+  }
+  recalcTaxes();
+});
+
+ivaAmountInput.addEventListener('input', () => {
+  sanitizeDecimalInput(ivaAmountInput);
+  if (!ivaAmountInput.value.trim()) {
+    clearManualPercent(ivaPercentInput, ivaAmountInput);
+    recalcTaxes();
+    return;
+  }
+  const baseAmount = Math.abs(parseDecimal(amountInput.value));
+  const ivaAmountValue = getAmountValue(ivaAmountInput);
+  const percent = baseAmount ? (ivaAmountValue / baseAmount) * 100 : 0;
+  setManualPercent(ivaPercentInput, ivaAmountInput, percent);
+  recalcTaxes();
+});
+
+ivaAmountInput.addEventListener('blur', () => {
+  if (!ivaAmountInput.value.trim()) return;
+  const value = getAmountValue(ivaAmountInput);
+  ivaAmountInput.value = formatTaxAmount(value);
+});
+
+if (iibbPercentInput) {
+  iibbPercentInput.addEventListener('focus', () => {
+    if (iibbPercentInput.disabled || !isManualPercent(iibbPercentInput)) return;
+    const percent = parseDecimal(iibbPercentInput.dataset.manualPercent);
+    iibbPercentInput.value = percent ? percent.toFixed(2) : '0.00';
+    iibbPercentInput.select();
   });
 
-  function populateForm() {
-    form.dataset.invoiceId = invoice.id;
-    form.dataset.type = invoice.type;
-    form.date.value = invoice.date;
-    form.number.value = invoice.number || '';
-    form.description.value = invoice.description || '';
-    form.amount.value = invoice.amount;
-    form.iva_percent.value = invoice.iva_percent;
-    form.iibb_percent.value = invoice.iibb_percent || 0;
-    form.account_id.value = invoice.account_id;
-    billingAccountLabel.textContent = account.name;
-    billingAccountLabel.style.color = account.color;
-    const isPurchase = invoice.type === 'purchase';
-    iibbRow.classList.toggle('d-none', isPurchase);
-    iibbPercentInput.disabled = isPurchase;
-    iibbAmountInput.disabled = isPurchase;
-    const today = new Date().toISOString().split('T')[0];
-    form.date.max = today;
+  iibbPercentInput.addEventListener('blur', () => {
+    if (iibbPercentInput.disabled) return;
+    if (isManualPercent(iibbPercentInput)) {
+      iibbPercentInput.value = 'MOD';
+    }
+  });
+
+  iibbPercentInput.addEventListener('input', () => {
+    if (iibbPercentInput.disabled) return;
+    sanitizeDecimalInput(iibbPercentInput);
+    if (isManualPercent(iibbPercentInput)) {
+      clearManualPercent(iibbPercentInput, iibbAmountInput);
+    }
     recalcTaxes();
-    alertBox.classList.add('d-none');
-  }
-
-  function recalcTaxes() {
-    const amount = parseFloat(amountInput.value) || 0;
-    const ivaPercent = parseFloat(ivaPercentInput.value) || 0;
-    const ivaAmount = (amount * ivaPercent) / 100;
-    ivaAmountInput.value = formatCurrency(ivaAmount);
-    const iibbPercent = parseFloat(iibbPercentInput.value) || 0;
-    const iibbAmount = ((amount + ivaAmount) * iibbPercent) / 100;
-    iibbAmountInput.value = formatCurrency(iibbAmount);
-  }
-
-  amountInput.addEventListener('input', recalcTaxes);
-  ivaPercentInput.addEventListener('input', recalcTaxes);
-  iibbPercentInput.addEventListener('input', recalcTaxes);
-
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-    if (!form.reportValidity()) return;
-    const data = new FormData(form);
-    const amount = Math.abs(parseFloat(data.get('amount')));
-    const type = form.dataset.type;
-    const payload = {
-      date: data.get('date'),
-      number: data.get('number'),
-      description: data.get('description'),
-      amount,
-      account_id: Number(data.get('account_id')),
-      type,
-      iva_percent: parseFloat(data.get('iva_percent')) || 0,
-      iibb_percent: type === 'purchase' ? 0 : parseFloat(data.get('iibb_percent')) || 0
-    };
-    const today = new Date().toISOString().split('T')[0];
-    if (payload.date > today) {
-      alertBox.classList.remove('d-none', 'alert-success', 'alert-danger');
-      alertBox.classList.add('alert-danger');
-      alertBox.textContent = 'La fecha no puede ser futura';
-      return;
-    }
-    showOverlay();
-    const result = await updateInvoice(form.dataset.invoiceId, payload);
-    hideOverlay();
-    alertBox.classList.remove('d-none', 'alert-success', 'alert-danger');
-    if (result.ok) {
-      alertBox.classList.add('alert-success');
-      alertBox.textContent = 'Factura guardada';
-      setTimeout(() => {
-        invModal.hide();
-        window.location.reload();
-      }, 1000);
-    } else {
-      alertBox.classList.add('alert-danger');
-      alertBox.textContent = result.error || 'Error al guardar';
-    }
   });
 }
+
+if (iibbAmountInput) {
+  iibbAmountInput.addEventListener('input', () => {
+    if (iibbAmountInput.disabled) return;
+    sanitizeDecimalInput(iibbAmountInput);
+    if (!iibbAmountInput.value.trim()) {
+      clearManualPercent(iibbPercentInput, iibbAmountInput);
+      recalcTaxes();
+      return;
+    }
+    const baseAmount = Math.abs(parseDecimal(amountInput.value));
+    const ivaAmountValue = getAmountValue(ivaAmountInput);
+    const iibbAmountValue = getAmountValue(iibbAmountInput);
+    const iibbBase = baseAmount + ivaAmountValue;
+    const percent = iibbBase ? (iibbAmountValue / iibbBase) * 100 : 0;
+    setManualPercent(iibbPercentInput, iibbAmountInput, percent);
+    recalcTaxes();
+  });
+
+  iibbAmountInput.addEventListener('blur', () => {
+    if (iibbAmountInput.disabled || !iibbAmountInput.value.trim()) return;
+    const value = getAmountValue(iibbAmountInput);
+    iibbAmountInput.value = formatTaxAmount(value);
+  });
+}
+
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!form.reportValidity()) return;
+  const data = new FormData(form);
+  const type = form.dataset.type;
+  const amount = Math.abs(parseDecimal(data.get('amount')));
+  const ivaPercentValue = roundToTwo(Math.abs(getPercentValue(ivaPercentInput)));
+  const ivaAmountValue = roundToTwo(getAmountValue(ivaAmountInput));
+  const iibbPercentValue =
+    type === 'purchase' ? 0 : roundToTwo(Math.abs(getPercentValue(iibbPercentInput)));
+  const iibbAmountValue = roundToTwo(getAmountValue(iibbAmountInput));
+  const payload = {
+    date: data.get('date'),
+    number: data.get('number'),
+    description: data.get('description'),
+    amount,
+    account_id: Number(data.get('account_id')),
+    type,
+    iva_percent: ivaPercentValue,
+    iibb_percent: type === 'purchase' ? 0 : iibbPercentValue
+  };
+  if (isManualPercent(ivaPercentInput)) {
+    payload.iva_amount = ivaAmountValue;
+  }
+  if (type === 'purchase') {
+    payload.iibb_amount = 0;
+  } else if (isManualPercent(iibbPercentInput)) {
+    payload.iibb_amount = iibbAmountValue;
+  }
+  const today = new Date().toISOString().split('T')[0];
+  if (payload.date > today) {
+    alertBox.classList.remove('d-none', 'alert-success', 'alert-danger');
+    alertBox.classList.add('alert-danger');
+    alertBox.textContent = 'La fecha no puede ser futura';
+    return;
+  }
+  showOverlay();
+  const result = await updateInvoice(form.dataset.invoiceId, payload);
+  hideOverlay();
+  alertBox.classList.remove('d-none', 'alert-success', 'alert-danger');
+  if (result.ok) {
+    alertBox.classList.add('alert-success');
+    alertBox.textContent = 'Factura guardada';
+    setTimeout(() => {
+      if (invModal) {
+        invModal.hide();
+        window.location.reload();
+      } else {
+        window.location.href = `/invoice/${form.dataset.invoiceId}`;
+      }
+    }, 1000);
+  } else {
+    alertBox.classList.add('alert-danger');
+    alertBox.textContent = result.error || 'Error al guardar';
+  }
+});
