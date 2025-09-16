@@ -37,12 +37,12 @@
     </div>
     <div id="iibb-row" class="row{% if invoice.type == 'purchase' %} d-none{% endif %}">
       <div class="col-6 mb-3">
-        <label class="form-label">IIBB %
+        <label class="form-label">IIBB/SIRCREB %
           <input type="number" step="0.01" name="iibb_percent" class="form-control" value="{{ invoice.iibb_percent }}">
         </label>
       </div>
       <div class="col-6 mb-3">
-        <label class="form-label">IIBB $
+        <label class="form-label">IIBB/SIRCREB $
           <input type="text" name="iibb_amount" class="form-control" value="{{ invoice.iibb_amount }}" readonly>
         </label>
       </div>
