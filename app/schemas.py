@@ -49,6 +49,8 @@ class InvoiceCreate(BaseModel):
     amount: Decimal
     iva_percent: Decimal = Decimal("21")
     iibb_percent: Decimal = Decimal("3")
+    iva_amount: Decimal | None = None
+    iibb_amount: Decimal | None = None
     type: InvoiceType
 
 

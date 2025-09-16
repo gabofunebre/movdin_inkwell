@@ -23,18 +23,28 @@ def create_invoice(payload: InvoiceCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se permiten fechas futuras",
         )
-    iva_amount = (payload.amount * payload.iva_percent / Decimal("100")).quantize(
-        Decimal("0.01")
-    )
-    if payload.type == InvoiceType.SALE:
-        iibb_base = payload.amount + iva_amount
-        iibb_percent = payload.iibb_percent
-        iibb_amount = (iibb_base * iibb_percent / Decimal("100")).quantize(
+    if payload.iva_amount is not None:
+        iva_amount = abs(payload.iva_amount).quantize(Decimal("0.01"))
+    else:
+        iva_amount = (payload.amount * payload.iva_percent / Decimal("100")).quantize(
             Decimal("0.01")
         )
+    if payload.type == InvoiceType.SALE:
+        iibb_percent = payload.iibb_percent
+        if payload.iibb_amount is not None:
+            iibb_amount = abs(payload.iibb_amount).quantize(Decimal("0.01"))
+        else:
+            iibb_base = payload.amount + iva_amount
+            iibb_amount = (iibb_base * iibb_percent / Decimal("100")).quantize(
+                Decimal("0.01")
+            )
     else:
         iibb_percent = Decimal("0")
-        iibb_amount = Decimal("0")
+        iibb_amount = (
+            abs(payload.iibb_amount).quantize(Decimal("0.01"))
+            if payload.iibb_amount is not None
+            else Decimal("0")
+        )
     inv = Invoice(
         account_id=payload.account_id,
         date=payload.date,
@@ -72,18 +82,28 @@ def update_invoice(invoice_id: int, payload: InvoiceCreate, db: Session = Depend
         raise HTTPException(status_code=404, detail="Factura no encontrada")
     if payload.date > date.today():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se permiten fechas futuras")
-    iva_amount = (payload.amount * payload.iva_percent / Decimal("100")).quantize(
-        Decimal("0.01")
-    )
-    if payload.type == InvoiceType.SALE:
-        iibb_base = payload.amount + iva_amount
-        iibb_percent = payload.iibb_percent
-        iibb_amount = (iibb_base * iibb_percent / Decimal("100")).quantize(
+    if payload.iva_amount is not None:
+        iva_amount = abs(payload.iva_amount).quantize(Decimal("0.01"))
+    else:
+        iva_amount = (payload.amount * payload.iva_percent / Decimal("100")).quantize(
             Decimal("0.01")
         )
+    if payload.type == InvoiceType.SALE:
+        iibb_percent = payload.iibb_percent
+        if payload.iibb_amount is not None:
+            iibb_amount = abs(payload.iibb_amount).quantize(Decimal("0.01"))
+        else:
+            iibb_base = payload.amount + iva_amount
+            iibb_amount = (iibb_base * iibb_percent / Decimal("100")).quantize(
+                Decimal("0.01")
+            )
     else:
         iibb_percent = Decimal("0")
-        iibb_amount = Decimal("0")
+        iibb_amount = (
+            abs(payload.iibb_amount).quantize(Decimal("0.01"))
+            if payload.iibb_amount is not None
+            else Decimal("0")
+        )
     for field in [
         "account_id",
         "date",

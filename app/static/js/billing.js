@@ -21,6 +21,107 @@ const iibbPercentInput = form.iibb_percent;
 const iibbAmountInput = form.iibb_amount;
 const iibbRow = document.getElementById('iibb-row');
 const billingAccountLabel = document.getElementById('billing-account');
+const defaultIvaPercent = ivaPercentInput.value || '21';
+const defaultIibbPercent = iibbPercentInput.value || '3';
+
+function sanitizeDecimalInput(input) {
+  const cleaned = input.value.replace(/[^0-9,.-]/g, '');
+  if (cleaned !== input.value) {
+    input.value = cleaned;
+  }
+}
+
+function parseDecimal(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (value === null || value === undefined) return 0;
+  const str = value.toString().trim();
+  if (!str) return 0;
+  const sanitized = str.replace(/[^0-9,.-]/g, '');
+  if (!sanitized) return 0;
+  const commaIndex = sanitized.lastIndexOf(',');
+  const dotIndex = sanitized.lastIndexOf('.');
+  let normalized = sanitized;
+  if (commaIndex !== -1 && dotIndex !== -1) {
+    if (commaIndex > dotIndex) {
+      normalized = sanitized.replace(/\./g, '').replace(',', '.');
+    } else {
+      normalized = sanitized.replace(/,/g, '');
+    }
+  } else if (commaIndex !== -1) {
+    normalized = sanitized.replace(',', '.');
+  } else if (dotIndex !== -1) {
+    const segments = sanitized.split('.');
+    if (segments.length > 2) {
+      const decimalPart = segments.pop();
+      normalized = segments.join('') + '.' + decimalPart;
+    } else {
+      normalized = sanitized;
+    }
+  }
+  if (normalized.includes('-')) {
+    const negative = normalized.trim().startsWith('-');
+    normalized = normalized.replace(/-/g, '');
+    if (negative) {
+      normalized = '-' + normalized;
+    }
+  }
+  const num = Number(normalized);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function formatTaxAmount(value) {
+  const amount = Number.isFinite(value) ? value : 0;
+  return formatCurrency(amount);
+}
+
+function isManualPercent(input) {
+  return input.dataset.manual === 'true';
+}
+
+function setManualPercent(percentInput, amountInput, percentValue) {
+  percentInput.dataset.manual = 'true';
+  percentInput.dataset.manualPercent = String(percentValue ?? 0);
+  percentInput.value = 'MOD';
+  amountInput.dataset.manual = 'true';
+}
+
+function clearManualPercent(percentInput, amountInput, fallbackPercent = null) {
+  let manualStored = null;
+  if (isManualPercent(percentInput)) {
+    manualStored = percentInput.dataset.manualPercent ?? null;
+    delete percentInput.dataset.manual;
+    delete percentInput.dataset.manualPercent;
+  }
+  if (amountInput.dataset.manual === 'true') {
+    delete amountInput.dataset.manual;
+  }
+  if (percentInput.value === 'MOD') {
+    const nextValue = fallbackPercent ?? manualStored;
+    percentInput.value =
+      nextValue !== null && nextValue !== undefined && nextValue !== ''
+        ? String(nextValue)
+        : '';
+  }
+}
+
+function getPercentValue(percentInput) {
+  if (isManualPercent(percentInput)) {
+    return parseDecimal(percentInput.dataset.manualPercent);
+  }
+  return parseDecimal(percentInput.value);
+}
+
+function getAmountValue(amountInput) {
+  return Math.abs(parseDecimal(amountInput.value));
+}
+
+function roundToTwo(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 0;
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+}
 let offset = 0;
 const limit = 50;
 let loading = false;
@@ -75,17 +176,127 @@ function renderInvoices() {
 }
 
 function recalcTaxes() {
-  const amount = parseFloat(amountInput.value) || 0;
-  const ivaPercent = parseFloat(ivaPercentInput.value) || 0;
-  const ivaAmount = (amount * ivaPercent) / 100;
-  ivaAmountInput.value = formatCurrency(ivaAmount);
-  const iibbPercent = parseFloat(iibbPercentInput.value) || 0;
-  const iibbAmount = ((amount + ivaAmount) * iibbPercent) / 100;
-  iibbAmountInput.value = formatCurrency(iibbAmount);
+  const baseAmount = Math.abs(parseDecimal(amountInput.value));
+  const ivaManual = isManualPercent(ivaPercentInput);
+  let ivaAmountValue = getAmountValue(ivaAmountInput);
+  if (!ivaManual) {
+    const ivaPercent = parseDecimal(ivaPercentInput.value);
+    ivaAmountValue = (baseAmount * ivaPercent) / 100;
+    ivaAmountInput.value = formatTaxAmount(ivaAmountValue);
+  } else {
+    const percent = baseAmount ? (ivaAmountValue / baseAmount) * 100 : 0;
+    ivaPercentInput.dataset.manualPercent = String(percent);
+  }
+
+  if (iibbPercentInput.disabled) {
+    iibbAmountInput.value = formatTaxAmount(0);
+    clearManualPercent(iibbPercentInput, iibbAmountInput);
+    return;
+  }
+
+  const iibbManual = isManualPercent(iibbPercentInput);
+  let iibbAmountValue = getAmountValue(iibbAmountInput);
+  const iibbBase = baseAmount + ivaAmountValue;
+  if (!iibbManual) {
+    const iibbPercent = parseDecimal(iibbPercentInput.value);
+    iibbAmountValue = (iibbBase * iibbPercent) / 100;
+    iibbAmountInput.value = formatTaxAmount(iibbAmountValue);
+  } else {
+    const percent = iibbBase ? (iibbAmountValue / iibbBase) * 100 : 0;
+    iibbPercentInput.dataset.manualPercent = String(percent);
+  }
 }
-amountInput.addEventListener('input', recalcTaxes);
-ivaPercentInput.addEventListener('input', recalcTaxes);
-iibbPercentInput.addEventListener('input', recalcTaxes);
+
+amountInput.addEventListener('input', () => {
+  recalcTaxes();
+});
+
+ivaPercentInput.addEventListener('focus', () => {
+  if (!isManualPercent(ivaPercentInput)) return;
+  const percent = parseDecimal(ivaPercentInput.dataset.manualPercent);
+  ivaPercentInput.value = percent ? percent.toFixed(2) : '0.00';
+  ivaPercentInput.select();
+});
+
+ivaPercentInput.addEventListener('blur', () => {
+  if (isManualPercent(ivaPercentInput)) {
+    ivaPercentInput.value = 'MOD';
+  }
+});
+
+ivaPercentInput.addEventListener('input', () => {
+  sanitizeDecimalInput(ivaPercentInput);
+  if (isManualPercent(ivaPercentInput)) {
+    clearManualPercent(ivaPercentInput, ivaAmountInput);
+  }
+  recalcTaxes();
+});
+
+ivaAmountInput.addEventListener('input', () => {
+  sanitizeDecimalInput(ivaAmountInput);
+  if (!ivaAmountInput.value.trim()) {
+    clearManualPercent(ivaPercentInput, ivaAmountInput);
+    recalcTaxes();
+    return;
+  }
+  const baseAmount = Math.abs(parseDecimal(amountInput.value));
+  const ivaAmountValue = getAmountValue(ivaAmountInput);
+  const percent = baseAmount ? (ivaAmountValue / baseAmount) * 100 : 0;
+  setManualPercent(ivaPercentInput, ivaAmountInput, percent);
+  recalcTaxes();
+});
+
+ivaAmountInput.addEventListener('blur', () => {
+  if (!ivaAmountInput.value.trim()) return;
+  const value = getAmountValue(ivaAmountInput);
+  ivaAmountInput.value = formatTaxAmount(value);
+});
+
+iibbPercentInput.addEventListener('focus', () => {
+  if (iibbPercentInput.disabled || !isManualPercent(iibbPercentInput)) return;
+  const percent = parseDecimal(iibbPercentInput.dataset.manualPercent);
+  iibbPercentInput.value = percent ? percent.toFixed(2) : '0.00';
+  iibbPercentInput.select();
+});
+
+iibbPercentInput.addEventListener('blur', () => {
+  if (iibbPercentInput.disabled) return;
+  if (isManualPercent(iibbPercentInput)) {
+    iibbPercentInput.value = 'MOD';
+  }
+});
+
+iibbPercentInput.addEventListener('input', () => {
+  if (iibbPercentInput.disabled) return;
+  sanitizeDecimalInput(iibbPercentInput);
+  if (isManualPercent(iibbPercentInput)) {
+    clearManualPercent(iibbPercentInput, iibbAmountInput);
+  }
+  recalcTaxes();
+});
+
+iibbAmountInput.addEventListener('input', () => {
+  if (iibbAmountInput.disabled) return;
+  sanitizeDecimalInput(iibbAmountInput);
+  if (!iibbAmountInput.value.trim()) {
+    clearManualPercent(iibbPercentInput, iibbAmountInput);
+    recalcTaxes();
+    return;
+  }
+  const baseAmount = Math.abs(parseDecimal(amountInput.value));
+  const ivaAmountValue = getAmountValue(ivaAmountInput);
+  const iibbAmountValue = getAmountValue(iibbAmountInput);
+  const iibbBase = baseAmount + ivaAmountValue;
+  const percent = iibbBase ? (iibbAmountValue / iibbBase) * 100 : 0;
+  setManualPercent(iibbPercentInput, iibbAmountInput, percent);
+  recalcTaxes();
+});
+
+iibbAmountInput.addEventListener('blur', () => {
+  if (iibbAmountInput.disabled || !iibbAmountInput.value.trim()) return;
+  const value = getAmountValue(iibbAmountInput);
+  iibbAmountInput.value = formatTaxAmount(value);
+});
 
 async function loadMore() {
   if (loading) return;
@@ -109,6 +320,10 @@ function openModal(type) {
   billingAccountLabel.textContent = billingAccount.name;
   billingAccountLabel.style.color = billingAccount.color;
   form.dataset.type = type;
+  clearManualPercent(ivaPercentInput, ivaAmountInput);
+  clearManualPercent(iibbPercentInput, iibbAmountInput);
+  ivaPercentInput.value = defaultIvaPercent;
+  ivaAmountInput.value = formatTaxAmount(0);
   alertBox.classList.add('d-none');
   const today = new Date().toISOString().split('T')[0];
   form.date.max = today;
@@ -117,7 +332,8 @@ function openModal(type) {
   iibbRow.classList.toggle('d-none', isPurchase);
   iibbPercentInput.disabled = isPurchase;
   iibbAmountInput.disabled = isPurchase;
-  iibbPercentInput.value = isPurchase ? 0 : 3;
+  iibbPercentInput.value = isPurchase ? '0' : defaultIibbPercent;
+  iibbAmountInput.value = formatTaxAmount(0);
   recalcTaxes();
   invModal.show();
 }
@@ -163,24 +379,36 @@ container.addEventListener('scroll', () => {
     if (!form.reportValidity()) return;
     const data = new FormData(form);
     const isPurchase = form.dataset.type === 'purchase';
-    const amount = Math.abs(parseFloat(data.get('amount')));
+    const amount = Math.abs(parseFloat(data.get('amount'))) || 0;
+    const ivaPercent = roundToTwo(Math.abs(getPercentValue(ivaPercentInput)));
+    const ivaAmount = roundToTwo(getAmountValue(ivaAmountInput));
+    const iibbPercentValue = isPurchase ? 0 : roundToTwo(Math.abs(getPercentValue(iibbPercentInput)));
+    const iibbAmount = roundToTwo(getAmountValue(iibbAmountInput));
     const payload = {
       date: data.get('date'),
       number: data.get('number'),
       description: data.get('description'),
       amount,
-    account_id: billingAccount.id,
-    type: form.dataset.type,
-    iva_percent: parseFloat(data.get('iva_percent')) || 0,
-    iibb_percent: isPurchase ? 0 : parseFloat(data.get('iibb_percent')) || 0
-  };
-  const today = new Date().toISOString().split('T')[0];
-  if (payload.date > today) {
-    alertBox.classList.remove('d-none', 'alert-success', 'alert-danger');
-    alertBox.classList.add('alert-danger');
-    alertBox.textContent = 'La fecha no puede ser futura';
-    return;
-  }
+      account_id: billingAccount.id,
+      type: form.dataset.type,
+      iva_percent: ivaPercent,
+      iibb_percent: isPurchase ? 0 : iibbPercentValue
+    };
+    if (isManualPercent(ivaPercentInput)) {
+      payload.iva_amount = ivaAmount;
+    }
+    if (isPurchase) {
+      payload.iibb_amount = 0;
+    } else if (isManualPercent(iibbPercentInput)) {
+      payload.iibb_amount = iibbAmount;
+    }
+    const today = new Date().toISOString().split('T')[0];
+    if (payload.date > today) {
+      alertBox.classList.remove('d-none', 'alert-success', 'alert-danger');
+      alertBox.classList.add('alert-danger');
+      alertBox.textContent = 'La fecha no puede ser futura';
+      return;
+    }
 
   showOverlay();
   const result = await createInvoice(payload);
