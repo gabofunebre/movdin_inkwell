@@ -67,7 +67,7 @@ async function toggleDetails(row, acc) {
     html += `<p><strong>IVA Compras:</strong> <span class="text-success">${symbol} ${formatCurrency(summary.iva_purchases)}</span></p>`;
     html += `<p><strong>IVA Ventas:</strong> <span class="text-danger">${symbol} ${formatCurrency(summary.iva_sales)}</span></p>`;
     html += `<p><strong>Balance IVA:</strong> <span class="text-dark fst-italic">${symbol} ${formatCurrency(ivaBalance)}</span></p>`;
-    html += `<p><strong>IIBB:</strong> <span class="text-danger">${symbol} ${formatCurrency(summary.iibb)}</span></p>`;
+    html += `<p><strong>IIBB/SIRCREB:</strong> <span class="text-danger">${symbol} ${formatCurrency(summary.iibb)}</span></p>`;
     html += '</div>';
   }
   html += '</div>';
