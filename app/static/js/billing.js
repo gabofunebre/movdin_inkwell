@@ -1,10 +1,6 @@
 import { fetchAccounts, fetchInvoices, createInvoice } from './api.js?v=1';
-import {
-  renderInvoice,
-  showOverlay,
-  hideOverlay,
-  formatCurrency,
-} from './ui.js?v=1';
+import { renderInvoice, showOverlay, hideOverlay } from './ui.js?v=1';
+import { sanitizeDecimalInput, parseDecimal, formatCurrency } from './money.js?v=1';
 
 const tbody = document.querySelector('#inv-table tbody');
 const container = document.getElementById('table-container');
@@ -25,53 +21,6 @@ const retencionesInput = form.retenciones;
 const billingAccountLabel = document.getElementById('billing-account');
 const defaultIvaPercent = ivaPercentInput.value || '21';
 const defaultIibbPercent = iibbPercentInput.value || '3';
-
-function sanitizeDecimalInput(input) {
-  const cleaned = input.value.replace(/[^0-9,.-]/g, '');
-  if (cleaned !== input.value) {
-    input.value = cleaned;
-  }
-}
-
-function parseDecimal(value) {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0;
-  }
-  if (value === null || value === undefined) return 0;
-  const str = value.toString().trim();
-  if (!str) return 0;
-  const sanitized = str.replace(/[^0-9,.-]/g, '');
-  if (!sanitized) return 0;
-  const commaIndex = sanitized.lastIndexOf(',');
-  const dotIndex = sanitized.lastIndexOf('.');
-  let normalized = sanitized;
-  if (commaIndex !== -1 && dotIndex !== -1) {
-    if (commaIndex > dotIndex) {
-      normalized = sanitized.replace(/\./g, '').replace(',', '.');
-    } else {
-      normalized = sanitized.replace(/,/g, '');
-    }
-  } else if (commaIndex !== -1) {
-    normalized = sanitized.replace(',', '.');
-  } else if (dotIndex !== -1) {
-    const segments = sanitized.split('.');
-    if (segments.length > 2) {
-      const decimalPart = segments.pop();
-      normalized = segments.join('') + '.' + decimalPart;
-    } else {
-      normalized = sanitized;
-    }
-  }
-  if (normalized.includes('-')) {
-    const negative = normalized.trim().startsWith('-');
-    normalized = normalized.replace(/-/g, '');
-    if (negative) {
-      normalized = '-' + normalized;
-    }
-  }
-  const num = Number(normalized);
-  return Number.isFinite(num) ? num : 0;
-}
 
 function formatTaxAmount(value) {
   const amount = Number.isFinite(value) ? value : 0;
@@ -214,7 +163,14 @@ function recalcTaxes() {
 }
 
 amountInput.addEventListener('input', () => {
+  sanitizeDecimalInput(amountInput);
   recalcTaxes();
+});
+
+amountInput.addEventListener('blur', () => {
+  if (!amountInput.value.trim()) return;
+  const value = Math.abs(parseDecimal(amountInput.value));
+  amountInput.value = formatTaxAmount(value);
 });
 
 ivaPercentInput.addEventListener('focus', () => {
@@ -331,6 +287,7 @@ function openModal(type) {
     return;
   }
   form.reset();
+  amountInput.value = '';
   document.getElementById('form-title').textContent =
     type === 'sale' ? 'Nueva Factura de Venta' : 'Nueva Factura de Compra';
   form.account_id.value = billingAccount.id;
@@ -404,7 +361,7 @@ container.addEventListener('scroll', () => {
     if (!form.reportValidity()) return;
     const data = new FormData(form);
     const isPurchase = form.dataset.type === 'purchase';
-    const amount = Math.abs(parseFloat(data.get('amount'))) || 0;
+    const amount = Math.abs(parseDecimal(data.get('amount'))) || 0;
     const ivaPercent = roundToTwo(Math.abs(getPercentValue(ivaPercentInput)));
     const ivaAmount = roundToTwo(getAmountValue(ivaAmountInput));
     const iibbPercentValue = isPurchase ? 0 : roundToTwo(Math.abs(getPercentValue(iibbPercentInput)));
