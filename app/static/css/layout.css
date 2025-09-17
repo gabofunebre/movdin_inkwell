@@ -221,15 +221,15 @@ body {
 }
 
 #cert-table .col-ref {
-  width: 18ch;
+  width: 24ch;
+}
+
+#cert-table .col-concept {
+  width: 20ch;
 }
 
 #cert-table .col-amount {
   width: 18ch;
-}
-
-#cert-table .col-actions {
-  width: 12ch;
 }
 
 #cert-table thead {
@@ -245,6 +245,35 @@ body {
 #cert-table th,
 #cert-table td {
   border: none;
+}
+
+#cert-table tbody tr.cert-row-actionable {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+#cert-table tbody tr.cert-row-actionable:hover {
+  background-color: #eef4ff;
+}
+
+#cert-table tbody tr.cert-row-active {
+  background-color: #e2ebff;
+}
+
+.cert-action-row td {
+  background-color: #f8f9fa;
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid #dee2e6;
+}
+
+.cert-action-row .cert-action-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.cert-action-row .btn {
+  box-shadow: none;
 }
 
 #header-left {
@@ -273,16 +302,25 @@ body {
 }
 
 .header-more-link {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: 600;
-  color: #0d6efd;
+  color: #6c757d;
   text-decoration: none;
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
 }
 
 .header-more-link:hover,
 .header-more-link:focus {
-  color: #0a58ca;
-  text-decoration: underline;
+  color: #6c757d;
+  text-decoration: none;
+  box-shadow: none;
+}
+
+.header-more-link::after {
+  border-top-color: currentColor;
 }
 
 #logo-link {
@@ -362,6 +400,36 @@ body {
   background-color: #e9ecef;
 }
 
+#add-certificate,
+#back-to-billing {
+  width: auto;
+  min-width: 9rem;
+}
+
+#add-certificate {
+  color: #0d6efd;
+  border-color: #0d6efd;
+}
+
+#add-certificate:hover,
+#add-certificate:focus {
+  color: #0b5ed7;
+  border-color: #0b5ed7;
+  background-color: rgba(13, 110, 253, 0.1);
+}
+
+#back-to-billing {
+  color: #6c757d;
+  border-color: #6c757d;
+}
+
+#back-to-billing:hover,
+#back-to-billing:focus {
+  color: #565e64;
+  border-color: #565e64;
+  background-color: rgba(108, 117, 125, 0.1);
+}
+
 #add-sale {
   color: #6f42c1;
   border: 1px solid #6f42c1;
@@ -420,8 +488,7 @@ body {
   #cert-table .col-date,
   #cert-table .col-ref,
   #cert-table .col-concept,
-  #cert-table .col-amount,
-  #cert-table .col-actions {
+  #cert-table .col-amount {
     width: auto;
   }
 }

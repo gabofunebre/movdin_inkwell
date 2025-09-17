@@ -8,7 +8,8 @@ import { formatCurrency, showOverlay, hideOverlay } from './ui.js?v=1';
 import { sanitizeDecimalInput, parseDecimal } from './money.js?v=1';
 import { CURRENCY_SYMBOLS } from './constants.js';
 
-const tbody = document.querySelector('#cert-table tbody');
+const table = document.getElementById('cert-table');
+const tbody = table.querySelector('tbody');
 const addBtn = document.getElementById('add-certificate');
 const searchBox = document.getElementById('search-box');
 const modalEl = document.getElementById('certModal');
@@ -18,10 +19,13 @@ const modalTitle = document.getElementById('cert-form-title');
 const alertBox = document.getElementById('cert-alert');
 const amountInput = form.amount;
 const isAdmin = Boolean(window.isAdmin);
+const columnCount = table.querySelectorAll('thead th').length;
 const currencyCode = window.certCurrency || 'ARS';
 const currencySymbol = CURRENCY_SYMBOLS[currencyCode] || '';
 
 let certificates = [];
+let activeActionRow = null;
+let activeDataRow = null;
 
 function normalizeCertificate(cert) {
   return {
@@ -42,6 +46,80 @@ function formatDate(value) {
     .replace('.', '');
 }
 
+function clearActionRow() {
+  if (activeActionRow && activeActionRow.parentElement) {
+    activeActionRow.parentElement.removeChild(activeActionRow);
+  }
+  if (activeDataRow) {
+    activeDataRow.classList.remove('cert-row-active');
+  }
+  activeActionRow = null;
+  activeDataRow = null;
+}
+
+function createActionButton({
+  label,
+  icon,
+  className,
+  onClick
+}) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `btn btn-sm ${className} cert-action-btn`;
+  button.innerHTML = `<i class="${icon} me-1"></i>${label}`;
+  button.addEventListener('click', event => {
+    event.stopPropagation();
+    onClick();
+  });
+  return button;
+}
+
+function showActionRow(row, cert) {
+  clearActionRow();
+  activeDataRow = row;
+  activeDataRow.classList.add('cert-row-active');
+
+  const actionRow = document.createElement('tr');
+  actionRow.className = 'cert-action-row';
+
+  const actionCell = document.createElement('td');
+  actionCell.colSpan = columnCount;
+
+  const actionsWrapper = document.createElement('div');
+  actionsWrapper.className = 'cert-action-buttons';
+
+  const editBtn = createActionButton({
+    label: 'Editar',
+    icon: 'bi bi-pencil',
+    className: 'btn-outline-secondary',
+    onClick: () => openEditModal(cert)
+  });
+
+  const deleteBtn = createActionButton({
+    label: 'Eliminar',
+    icon: 'bi bi-x',
+    className: 'btn-outline-danger',
+    onClick: () => confirmDelete(cert)
+  });
+
+  actionsWrapper.append(editBtn, deleteBtn);
+  actionCell.appendChild(actionsWrapper);
+  actionRow.appendChild(actionCell);
+  row.after(actionRow);
+  activeActionRow = actionRow;
+}
+
+function toggleActionRow(row, cert) {
+  if (!isAdmin) {
+    return;
+  }
+  if (activeDataRow === row) {
+    clearActionRow();
+    return;
+  }
+  showActionRow(row, cert);
+}
+
 function renderCertificates() {
   const query = searchBox.value.trim().toLowerCase();
   const filtered = certificates.filter(cert => {
@@ -60,6 +138,7 @@ function renderCertificates() {
     }
     return new Date(b.date) - new Date(a.date);
   });
+  clearActionRow();
   tbody.innerHTML = '';
   filtered.forEach(cert => {
     const tr = document.createElement('tr');
@@ -86,27 +165,9 @@ function renderCertificates() {
     amountTd.textContent = `${currencySymbol} ${formatCurrency(Math.abs(amountValue))}`;
 
     tr.append(numberTd, dateTd, refTd, conceptTd, amountTd);
-
     if (isAdmin) {
-      const actionsTd = document.createElement('td');
-      actionsTd.className = 'text-center text-nowrap';
-
-      const editBtn = document.createElement('button');
-      editBtn.type = 'button';
-      editBtn.className = 'btn btn-sm btn-outline-secondary me-2';
-      editBtn.title = 'Editar';
-      editBtn.innerHTML = '<i class="bi bi-pencil"></i>';
-      editBtn.addEventListener('click', () => openEditModal(cert));
-
-      const deleteBtn = document.createElement('button');
-      deleteBtn.type = 'button';
-      deleteBtn.className = 'btn btn-sm btn-outline-danger';
-      deleteBtn.title = 'Eliminar';
-      deleteBtn.innerHTML = '<i class="bi bi-x"></i>';
-      deleteBtn.addEventListener('click', () => confirmDelete(cert));
-
-      actionsTd.append(editBtn, deleteBtn);
-      tr.appendChild(actionsTd);
+      tr.classList.add('cert-row-actionable');
+      tr.addEventListener('click', () => toggleActionRow(tr, cert));
     }
 
     tbody.appendChild(tr);
@@ -119,6 +180,7 @@ function setDateLimits() {
 }
 
 function openCreateModal() {
+  clearActionRow();
   form.reset();
   modalTitle.textContent = 'Nuevo certificado';
   form.dataset.mode = 'create';
@@ -131,6 +193,7 @@ function openCreateModal() {
 }
 
 function openEditModal(cert) {
+  clearActionRow();
   form.reset();
   modalTitle.textContent = 'Editar certificado';
   form.dataset.mode = 'edit';
@@ -229,6 +292,7 @@ async function confirmDelete(cert) {
       return;
     }
     certificates = certificates.filter(item => item.id !== cert.id);
+    clearActionRow();
     renderCertificates();
   } finally {
     hideOverlay();
@@ -246,5 +310,13 @@ amountInput.addEventListener('blur', () => {
   }
   amountInput.value = formatCurrency(Math.abs(value));
 });
+
+if (isAdmin) {
+  document.addEventListener('click', event => {
+    if (!table.contains(event.target)) {
+      clearActionRow();
+    }
+  });
+}
 
 loadCertificates();
