@@ -195,10 +195,66 @@ body {
   border: none;
 }
 
-#menu-button {
+#cert-table-wrapper {
+  border: 1px solid #d0d0d0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+#cert-table {
+  width: 100%;
+  table-layout: fixed;
+  border: none;
+  font-size: calc(1rem + 2pt);
+  --bs-table-striped-bg: #f0f8ff;
+  --bs-table-bg: #ffffff;
+  box-shadow: none;
+}
+
+#cert-table .col-number {
+  width: 14ch;
+}
+
+#cert-table .col-date {
+  width: 15ch;
+}
+
+#cert-table .col-ref {
+  width: 18ch;
+}
+
+#cert-table .col-amount {
+  width: 18ch;
+}
+
+#cert-table .col-actions {
+  width: 12ch;
+}
+
+#cert-table thead {
+  --bs-table-bg: #e9ecef;
+}
+
+#cert-table thead th {
+  text-transform: uppercase;
+  font-size: calc(1.1rem + 2pt);
+  border-bottom: none;
+}
+
+#cert-table th,
+#cert-table td {
+  border: none;
+}
+
+#header-left {
   left: 4rem;
   top: 50%;
   transform: translateY(-50%);
+  gap: 1rem;
+}
+
+#menu-button {
   width: 3.5rem;
   height: 3.5rem;
   padding: 0;
@@ -208,8 +264,25 @@ body {
 }
 
 #menu-button:hover {
-  transform: translateY(calc(-50% - 2px));
+  transform: translateY(-2px);
   box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+#more-documents .dropdown-menu {
+  min-width: 16rem;
+}
+
+.header-more-link {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #0d6efd;
+  text-decoration: none;
+}
+
+.header-more-link:hover,
+.header-more-link:focus {
+  color: #0a58ca;
+  text-decoration: underline;
 }
 
 #logo-link {
@@ -316,7 +389,7 @@ body {
   #table-container {
     padding: 1rem;
   }
-  #menu-button {
+  #header-left {
     left: 1rem;
   }
   #logo-link {
@@ -340,6 +413,15 @@ body {
   #inv-table .col-type,
   #inv-table .col-desc,
   #inv-table .col-amount {
+    width: auto;
+  }
+
+  #cert-table .col-number,
+  #cert-table .col-date,
+  #cert-table .col-ref,
+  #cert-table .col-concept,
+  #cert-table .col-amount,
+  #cert-table .col-actions {
     width: auto;
   }
 }

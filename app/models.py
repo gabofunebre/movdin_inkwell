@@ -81,6 +81,29 @@ class Invoice(Base):
     account = relationship("Account", back_populates="invoices")
 
 
+class RetentionCertificate(Base):
+    __tablename__ = "retention_certificates"
+    __table_args__ = (
+        Index(
+            "ix_retention_certificates_date_id",
+            "date",
+            "id",
+        ),
+        CheckConstraint(
+            "amount <> 0", name="ck_retention_certificates_amount_nonzero"
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    number: Mapped[str] = mapped_column(String(50), nullable=False)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    invoice_reference: Mapped[str] = mapped_column(String(50), nullable=False)
+    concept: Mapped[str] = mapped_column(Text, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class FrequentTransaction(Base):
     __tablename__ = "frequent_transactions"
     id: Mapped[int] = mapped_column(primary_key=True)
