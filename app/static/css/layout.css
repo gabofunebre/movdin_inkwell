@@ -3,60 +3,63 @@ body {
 }
 
 .tax-line {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content minmax(4.75rem, 5.5rem) minmax(0, 1fr);
   align-items: center;
-  gap: 1rem;
-  flex-wrap: nowrap;
+  column-gap: 0.75rem;
+  width: 100%;
 }
 
 .tax-label {
-  flex: 0 0 auto;
-  min-width: 11rem;
-  margin-right: 0;
-  text-align: right;
+  text-align: left;
   white-space: nowrap;
 }
 
 .tax-field {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.5rem;
-  white-space: nowrap;
+  column-gap: 0.5rem;
+  width: 100%;
 }
 
 .tax-field-amount {
-  flex: 1 1 auto;
-  margin-left: 0;
+  grid-column: 3;
 }
 
 .tax-line .form-control {
-  width: auto;
+  width: 100%;
+  min-width: 0;
 }
 
 .tax-line .tax-percent {
-  flex: 0 0 4.5rem;
-  max-width: 4.5rem;
+  width: 100%;
+  max-width: none;
 }
 
 .tax-line .tax-amount {
-  flex: 1 1 8rem;
+  width: 100%;
   min-width: 0;
 }
 
 @media (max-width: 576px) {
   .tax-line {
-    flex-wrap: wrap;
-    gap: 0.75rem;
+    grid-template-columns: 1fr;
+    row-gap: 0.75rem;
   }
 
   .tax-label {
-    min-width: 0;
-    flex-basis: 100%;
-    text-align: left;
+    white-space: normal;
   }
 
+  .tax-field,
   .tax-field-amount {
-    flex-basis: 100%;
+    grid-column: auto;
+    width: 100%;
+  }
+
+  .tax-field {
+    grid-template-columns: auto minmax(0, 1fr);
   }
 }
 
