@@ -5,23 +5,28 @@ body {
 .tax-line {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  gap: 1rem;
+  flex-wrap: nowrap;
 }
 
 .tax-label {
-  flex: 0 0 7rem;
-  margin-right: 0.75rem;
+  flex: 0 0 auto;
+  min-width: 11rem;
+  margin-right: 0;
   text-align: right;
+  white-space: nowrap;
 }
 
 .tax-field {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  white-space: nowrap;
 }
 
 .tax-field-amount {
-  margin-left: 5ch;
+  flex: 1 1 auto;
+  margin-left: 0;
 }
 
 .tax-line .form-control {
@@ -36,6 +41,23 @@ body {
 .tax-line .tax-amount {
   flex: 1 1 8rem;
   min-width: 0;
+}
+
+@media (max-width: 576px) {
+  .tax-line {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .tax-label {
+    min-width: 0;
+    flex-basis: 100%;
+    text-align: left;
+  }
+
+  .tax-field-amount {
+    flex-basis: 100%;
+  }
 }
 
 .tax-symbol {
