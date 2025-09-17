@@ -17,6 +17,7 @@ from routes.health import router as health_router
 from routes.transactions import router as transactions_router
 from routes.frequents import router as frequents_router
 from routes.invoices import router as invoices_router
+from routes.certificates import router as certificates_router
 from routes.users import router as users_router
 from routes.billing_info import router as billing_info_router
 
@@ -77,6 +78,7 @@ app.include_router(frequents_router)
 app.include_router(invoices_router)
 app.include_router(users_router)
 app.include_router(billing_info_router)
+app.include_router(certificates_router)
 
 app.mount(
     "/static",
@@ -132,12 +134,66 @@ async def billing(request: Request, db: Session = Depends(get_db), user=Depends(
         header_title = (
             f"Facturación - <span style=\"color:{acc.color}\">{acc.name}</span>"
         )
+        billing_currency = acc.currency
     else:
         title = "Facturación"
         header_title = "Facturación"
+        billing_currency = None
+    more_documents = [
+        {
+            "label": "Certificado de Retención",
+            "url": "/certificados-retencion.html",
+            "active": False,
+        }
+    ]
     return templates.TemplateResponse(
         "billing.html",
-        {"request": request, "title": title, "header_title": header_title, "user": user},
+        {
+            "request": request,
+            "title": title,
+            "header_title": header_title,
+            "user": user,
+            "more_documents": more_documents,
+            "billing_account": acc,
+            "billing_currency": billing_currency,
+        },
+    )
+
+
+@app.get("/certificados-retencion.html", response_class=HTMLResponse)
+async def retention_certificates(
+    request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    acc = db.query(Account).filter(Account.is_billing.is_(True)).first()
+    if acc:
+        title = f"Certificados de Retención - {acc.name}"
+        header_title = (
+            "Certificados de Retención - "
+            f"<span style=\"color:{acc.color}\">{acc.name}</span>"
+        )
+        billing_currency = acc.currency
+    else:
+        title = "Certificados de Retención"
+        header_title = "Certificados de Retención"
+        billing_currency = None
+    more_documents = [
+        {
+            "label": "Certificado de Retención",
+            "url": "/certificados-retencion.html",
+            "active": True,
+        }
+    ]
+    return templates.TemplateResponse(
+        "cert_retencion.html",
+        {
+            "request": request,
+            "title": title,
+            "header_title": header_title,
+            "user": user,
+            "more_documents": more_documents,
+            "billing_account": acc,
+            "billing_currency": billing_currency,
+        },
     )
 
 

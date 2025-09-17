@@ -13,6 +13,11 @@ export async function fetchInvoices(limit, offset) {
   return res.json();
 }
 
+export async function fetchRetentionCertificates(limit, offset) {
+  const res = await fetch(`/retention-certificates?limit=${limit}&offset=${offset}`);
+  return res.json();
+}
+
 export async function fetchAccountBalances() {
   const res = await fetch('/accounts/balances');
   return res.json();
@@ -104,6 +109,61 @@ export async function updateInvoice(id, payload) {
 
 export async function deleteInvoice(id) {
   const res = await fetch(`/invoices/${id}`, { method: 'DELETE' });
+  if (res.ok) return { ok: true };
+  let error = 'Error al eliminar';
+  try {
+    const data = await res.json();
+    error = data.detail || error;
+  } catch (_) {}
+  return { ok: false, error };
+}
+
+export async function createRetentionCertificate(payload) {
+  const res = await fetch('/retention-certificates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) {
+    const certificate = await res.json();
+    return { ok: true, certificate };
+  }
+  let error = 'Error al guardar';
+  try {
+    const data = await res.json();
+    if (Array.isArray(data.detail)) {
+      error = data.detail.map(d => d.msg).join(', ');
+    } else {
+      error = data.detail || error;
+    }
+  } catch (_) {}
+  return { ok: false, error };
+}
+
+export async function updateRetentionCertificate(id, payload) {
+  const res = await fetch(`/retention-certificates/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) {
+    const certificate = await res.json();
+    return { ok: true, certificate };
+  }
+  let error = 'Error al guardar';
+  try {
+    const data = await res.json();
+    if (Array.isArray(data.detail)) {
+      error = data.detail.map(d => d.msg).join(', ');
+    } else {
+      error = data.detail || error;
+    }
+  } catch (_) {}
+  return { ok: false, error };
+}
+
+export async function deleteRetentionCertificate(id) {
+  const res = await fetch(`/retention-certificates/${id}`, { method: 'DELETE' });
   if (res.ok) return { ok: true };
   let error = 'Error al eliminar';
   try {

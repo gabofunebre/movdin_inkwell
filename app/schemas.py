@@ -73,6 +73,21 @@ class InvoiceOut(BaseModel):
         from_attributes = True
 
 
+class RetentionCertificateCreate(BaseModel):
+    number: str
+    date: date
+    invoice_reference: str
+    concept: str
+    amount: Decimal
+
+
+class RetentionCertificateOut(RetentionCertificateCreate):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
 class FrequentIn(BaseModel):
     description: str
 
