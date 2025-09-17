@@ -12,6 +12,7 @@ import {
   showOverlay,
   hideOverlay,
 } from './ui.js?v=1';
+import { sanitizeDecimalInput, parseDecimal, formatCurrency } from './money.js?v=1';
 
 const tbody = document.querySelector('#tx-table tbody');
 const container = document.getElementById('table-container');
@@ -24,6 +25,7 @@ const headers = document.querySelectorAll('#tx-table thead th.sortable');
 const freqCheck = document.getElementById('freq-check');
 const freqSelect = document.getElementById('freq-select');
 const descInput = document.getElementById('desc-input');
+const amountInput = form.amount;
 
 let offset = 0;
 const limit = 50;
@@ -78,6 +80,7 @@ async function loadMore() {
 
 function openModal(type) {
   form.reset();
+  amountInput.value = '';
   document.getElementById('form-title').textContent = type === 'income' ? 'Nuevo Ingreso' : 'Nuevo Egreso';
   populateAccounts(form.account_id, accounts.filter(a => a.is_active));
   form.dataset.type = type;
@@ -109,7 +112,7 @@ function openEditModal(tx) {
   descInput.classList.remove('d-none');
   freqSelect.classList.add('d-none');
   descInput.value = tx.description;
-  form.amount.value = Math.abs(tx.amount);
+  amountInput.value = formatCurrency(Math.abs(tx.amount));
   form.account_id.value = tx.account_id;
   txModal.show();
 }
@@ -165,6 +168,16 @@ function applyFrequent(f) {
   descInput.value = f.description;
 }
 
+amountInput.addEventListener('input', () => {
+  sanitizeDecimalInput(amountInput);
+});
+
+amountInput.addEventListener('blur', () => {
+  if (!amountInput.value.trim()) return;
+  const value = Math.abs(parseDecimal(amountInput.value));
+  amountInput.value = formatCurrency(value);
+});
+
 headers.forEach((th, index) => {
   th.addEventListener('click', () => {
     if (sortColumn === index) {
@@ -201,7 +214,7 @@ form.addEventListener('submit', async e => {
   e.preventDefault();
   if (!form.reportValidity()) return;
   const data = new FormData(form);
-  let amount = parseFloat(data.get('amount'));
+  let amount = parseDecimal(data.get('amount'));
   amount = form.dataset.type === 'expense' ? -Math.abs(amount) : Math.abs(amount);
   const payload = {
     date: data.get('date'),

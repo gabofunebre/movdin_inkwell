@@ -15,6 +15,7 @@ import {
   hideOverlay,
 } from './ui.js?v=1';
 import { CURRENCIES } from './constants.js';
+import { sanitizeDecimalInput, parseDecimal, formatCurrency } from './money.js?v=1';
 
 const tbody = document.querySelector('#account-table tbody');
 const modalEl = document.getElementById('accountModal');
@@ -28,6 +29,7 @@ const colorInput = form.querySelector('input[name="color"]');
 const colorBtn = document.getElementById('color-btn');
 const modalTitle = modalEl.querySelector('.modal-title');
 let accounts = [];
+const openingBalanceInput = form.opening_balance;
 const confirmEl = document.getElementById('confirmModal');
 const confirmModal = new bootstrap.Modal(confirmEl);
 const confirmMessage = confirmEl.querySelector('#confirm-message');
@@ -59,9 +61,20 @@ function populateCurrencies() {
   });
 }
 
+openingBalanceInput.addEventListener('input', () => {
+  sanitizeDecimalInput(openingBalanceInput);
+});
+
+openingBalanceInput.addEventListener('blur', () => {
+  if (!openingBalanceInput.value.trim()) return;
+  const value = parseDecimal(openingBalanceInput.value);
+  openingBalanceInput.value = formatCurrency(value);
+});
+
 addBtn.addEventListener('click', async () => {
   form.reset();
   populateCurrencies();
+  openingBalanceInput.value = formatCurrency(0);
   idField.value = '';
   alertBox.classList.add('d-none');
   colorInput.value = '#000000';
@@ -89,7 +102,7 @@ form.addEventListener('submit', async e => {
   const payload = {
     name: data.get('name'),
     currency: data.get('currency'),
-    opening_balance: parseFloat(data.get('opening_balance') || '0'),
+    opening_balance: parseDecimal(data.get('opening_balance') || '0'),
     is_active: true,
     color: data.get('color') || '#000000',
     is_billing: form.is_billing.checked
@@ -140,7 +153,7 @@ async function startEdit(acc) {
   populateCurrencies();
   form.name.value = acc.name;
   form.currency.value = acc.currency;
-  form.opening_balance.value = acc.opening_balance;
+  openingBalanceInput.value = formatCurrency(acc.opening_balance);
   idField.value = acc.id;
   const color = acc.color || '#000000';
   colorInput.value = color;
