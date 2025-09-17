@@ -11,18 +11,32 @@ function isManualPercent(percentInput) {
   return percentInput?.dataset.manual === 'true';
 }
 
+function showManualPlaceholder(percentInput) {
+  if (!percentInput) return;
+  percentInput.placeholder = 'MOD';
+  percentInput.classList.add('manual-value');
+}
+
+function hideManualPlaceholder(percentInput) {
+  if (!percentInput) return;
+  percentInput.placeholder = '';
+  percentInput.classList.remove('manual-value');
+}
+
 function setManualPercent(percentInput, amountInput, percentValue) {
   if (!percentInput || !amountInput) return;
   percentInput.dataset.manual = 'true';
   percentInput.dataset.manualPercent = String(percentValue ?? 0);
-  percentInput.value = 'MOD';
+  percentInput.value = '';
+  showManualPlaceholder(percentInput);
   amountInput.dataset.manual = 'true';
 }
 
 function clearManualPercent(percentInput, amountInput, fallbackPercent = null) {
   if (!percentInput || !amountInput) return;
   let manualStored = null;
-  if (isManualPercent(percentInput)) {
+  const wasManual = isManualPercent(percentInput);
+  if (wasManual) {
     manualStored = percentInput.dataset.manualPercent ?? null;
     delete percentInput.dataset.manual;
     delete percentInput.dataset.manualPercent;
@@ -30,7 +44,8 @@ function clearManualPercent(percentInput, amountInput, fallbackPercent = null) {
   if (amountInput.dataset.manual === 'true') {
     delete amountInput.dataset.manual;
   }
-  if (percentInput.value === 'MOD') {
+  if (wasManual) {
+    hideManualPlaceholder(percentInput);
     const nextValue = fallbackPercent ?? manualStored;
     percentInput.value =
       nextValue !== null && nextValue !== undefined && nextValue !== ''
@@ -228,6 +243,7 @@ amountInput.addEventListener('blur', () => {
 
 ivaPercentInput.addEventListener('focus', () => {
   if (!isManualPercent(ivaPercentInput)) return;
+  hideManualPlaceholder(ivaPercentInput);
   const percent = parseDecimal(ivaPercentInput.dataset.manualPercent);
   ivaPercentInput.value = percent ? percent.toFixed(2) : '0.00';
   ivaPercentInput.select();
@@ -235,7 +251,8 @@ ivaPercentInput.addEventListener('focus', () => {
 
 ivaPercentInput.addEventListener('blur', () => {
   if (isManualPercent(ivaPercentInput)) {
-    ivaPercentInput.value = 'MOD';
+    ivaPercentInput.value = '';
+    showManualPlaceholder(ivaPercentInput);
   }
 });
 
@@ -270,6 +287,7 @@ ivaAmountInput.addEventListener('blur', () => {
 if (iibbPercentInput) {
   iibbPercentInput.addEventListener('focus', () => {
     if (iibbPercentInput.disabled || !isManualPercent(iibbPercentInput)) return;
+    hideManualPlaceholder(iibbPercentInput);
     const percent = parseDecimal(iibbPercentInput.dataset.manualPercent);
     iibbPercentInput.value = percent ? percent.toFixed(2) : '0.00';
     iibbPercentInput.select();
@@ -278,7 +296,8 @@ if (iibbPercentInput) {
   iibbPercentInput.addEventListener('blur', () => {
     if (iibbPercentInput.disabled) return;
     if (isManualPercent(iibbPercentInput)) {
-      iibbPercentInput.value = 'MOD';
+      iibbPercentInput.value = '';
+      showManualPlaceholder(iibbPercentInput);
     }
   });
 
