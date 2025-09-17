@@ -169,10 +169,10 @@ def account_balances(to_date: date | None = None, db: Session = Depends(get_db))
             ).label("iibb"),
             func.coalesce(
                 func.sum(
-                    case((Invoice.type == InvoiceType.PURCHASE, Invoice.retenciones), else_=0)
+                    case((Invoice.type == InvoiceType.PURCHASE, Invoice.percepciones), else_=0)
                 ),
                 0,
-            ).label("retenciones"),
+            ).label("percepciones"),
         ).group_by(Invoice.account_id)
     )
     tax_rows = db.execute(tax_stmt).all()
@@ -189,7 +189,7 @@ def account_balances(to_date: date | None = None, db: Session = Depends(get_db))
                     - taxes.iva_sale
                     - taxes.iibb
                     + taxes.iva_pur
-                    + taxes.retenciones
+                    + taxes.percepciones
                 )
         balances.append(
             AccountBalance(
@@ -249,7 +249,7 @@ def account_summary(account_id: int, db: Session = Depends(get_db)):
         .group_by(Account.id)
     )
     row = db.execute(stmt).one()
-    iva_pur = iva_sale = iibb = retenciones = Decimal("0")
+    iva_pur = iva_sale = iibb = percepciones = Decimal("0")
     if row.is_billing:
         tax_stmt = (
             select(
@@ -273,10 +273,10 @@ def account_summary(account_id: int, db: Session = Depends(get_db)):
                 ).label("iibb"),
                 func.coalesce(
                     func.sum(
-                        case((Invoice.type == InvoiceType.PURCHASE, Invoice.retenciones), else_=0)
+                        case((Invoice.type == InvoiceType.PURCHASE, Invoice.percepciones), else_=0)
                     ),
                     0,
-                ).label("retenciones"),
+                ).label("percepciones"),
             )
             .where(Invoice.account_id == account_id)
         )
@@ -284,7 +284,7 @@ def account_summary(account_id: int, db: Session = Depends(get_db)):
         iva_pur = tax_row.iva_pur
         iva_sale = tax_row.iva_sale
         iibb = tax_row.iibb
-        retenciones = tax_row.retenciones
+        percepciones = tax_row.percepciones
     return AccountSummary(
         opening_balance=row.opening_balance,
         income_balance=row.income,
@@ -293,7 +293,7 @@ def account_summary(account_id: int, db: Session = Depends(get_db)):
         iva_purchases=iva_pur if row.is_billing else None,
         iva_sales=iva_sale if row.is_billing else None,
         iibb=iibb if row.is_billing else None,
-        retenciones=retenciones if row.is_billing else None,
+        percepciones=percepciones if row.is_billing else None,
     )
 
 

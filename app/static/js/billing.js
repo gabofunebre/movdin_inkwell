@@ -17,7 +17,7 @@ const iibbPercentInput = form.iibb_percent;
 const iibbAmountInput = form.iibb_amount;
 const iibbRow = document.getElementById('iibb-row');
 const retRow = document.getElementById('ret-row');
-const retencionesInput = form.retenciones;
+const percepcionesInput = form.percepciones;
 const billingAccountLabel = document.getElementById('billing-account');
 const defaultIvaPercent = ivaPercentInput.value || '21';
 const defaultIibbPercent = iibbPercentInput.value || '3';
@@ -129,10 +129,10 @@ function renderInvoices() {
       case 4:
         // Comparar por monto total (importe sin impuestos + IVA)
         const totalWithIvaA = Math.abs(
-          Number(a.amount) + Number(a.iva_amount) + Number(a.retenciones || 0)
+          Number(a.amount) + Number(a.iva_amount) + Number(a.percepciones || 0)
         );
         const totalWithIvaB = Math.abs(
-          Number(b.amount) + Number(b.iva_amount) + Number(b.retenciones || 0)
+          Number(b.amount) + Number(b.iva_amount) + Number(b.percepciones || 0)
         );
         return sortAsc
           ? totalWithIvaA - totalWithIvaB
@@ -279,15 +279,15 @@ iibbAmountInput.addEventListener('blur', () => {
   iibbAmountInput.value = formatTaxAmount(value);
 });
 
-retencionesInput.addEventListener('input', () => {
-  if (retencionesInput.disabled) return;
-  sanitizeDecimalInput(retencionesInput);
+percepcionesInput.addEventListener('input', () => {
+  if (percepcionesInput.disabled) return;
+  sanitizeDecimalInput(percepcionesInput);
 });
 
-retencionesInput.addEventListener('blur', () => {
-  if (retencionesInput.disabled || !retencionesInput.value.trim()) return;
-  const value = getAmountValue(retencionesInput);
-  retencionesInput.value = formatTaxAmount(value);
+percepcionesInput.addEventListener('blur', () => {
+  if (percepcionesInput.disabled || !percepcionesInput.value.trim()) return;
+  const value = getAmountValue(percepcionesInput);
+  percepcionesInput.value = formatTaxAmount(value);
 });
 
 async function loadMore() {
@@ -325,15 +325,15 @@ function openModal(type) {
   if (retRow) {
     retRow.classList.toggle('d-none', !isPurchase);
   }
-  retencionesInput.disabled = !isPurchase;
-  retencionesInput.value = formatTaxAmount(0);
+  percepcionesInput.disabled = !isPurchase;
+  percepcionesInput.value = formatTaxAmount(0);
   iibbRow.classList.toggle('d-none', isPurchase);
   iibbPercentInput.disabled = isPurchase;
   iibbAmountInput.disabled = isPurchase;
   iibbPercentInput.value = isPurchase ? '0' : defaultIibbPercent;
   iibbAmountInput.value = formatTaxAmount(0);
   if (!isPurchase) {
-    retencionesInput.value = formatTaxAmount(0);
+    percepcionesInput.value = formatTaxAmount(0);
   }
   recalcTaxes();
   invModal.show();
@@ -385,7 +385,7 @@ container.addEventListener('scroll', () => {
     const ivaAmount = roundToTwo(getAmountValue(ivaAmountInput));
     const iibbPercentValue = isPurchase ? 0 : roundToTwo(Math.abs(getPercentValue(iibbPercentInput)));
     const iibbAmount = roundToTwo(getAmountValue(iibbAmountInput));
-    const retencionesAmount = isPurchase ? roundToTwo(getAmountValue(retencionesInput)) : 0;
+    const percepcionesAmount = isPurchase ? roundToTwo(getAmountValue(percepcionesInput)) : 0;
     const payload = {
       date: data.get('date'),
       number: data.get('number'),
@@ -395,7 +395,7 @@ container.addEventListener('scroll', () => {
       type: form.dataset.type,
       iva_percent: ivaPercent,
       iibb_percent: isPurchase ? 0 : iibbPercentValue,
-      retenciones: retencionesAmount
+      percepciones: percepcionesAmount
     };
     if (isManualPercent(ivaPercentInput)) {
       payload.iva_amount = ivaAmount;

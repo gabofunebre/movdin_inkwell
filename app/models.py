@@ -71,7 +71,7 @@ class Invoice(Base):
     iva_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     iibb_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=3)
     iibb_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
-    retenciones: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    percepciones: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     type: Mapped[InvoiceType] = mapped_column(SqlEnum(InvoiceType), nullable=False)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
