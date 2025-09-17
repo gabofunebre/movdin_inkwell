@@ -1,11 +1,7 @@
 import { CURRENCY_SYMBOLS } from './constants.js';
+import { formatCurrency } from './money.js?v=1';
 
-export function formatCurrency(value) {
-  return Number(value).toLocaleString('es-AR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
-}
+export { formatCurrency };
 
 export function renderTransaction(tbody, tx, accountMap, onEdit, onDelete) {
   const tr = document.createElement('tr');
