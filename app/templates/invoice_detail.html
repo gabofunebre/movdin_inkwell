@@ -23,7 +23,7 @@
       <tr><th>SIRCREB % {{ invoice.iibb_percent }}</th><td class="amount">{{ symbol }} {{ invoice.iibb_amount|money }}</td></tr>
       {% endif %}
       {% if invoice.type == 'purchase' %}
-      <tr><th>Percepciones y otros</th><td class="amount">{{ symbol }} {{ invoice.retenciones|money }}</td></tr>
+      <tr><th>Percepciones y otros</th><td class="amount">{{ symbol }} {{ invoice.percepciones|money }}</td></tr>
       {% endif %}
       <tr class="total"><th>Total</th><td class="amount">{{ symbol }} {{ total|money }}</td></tr>
     </tbody>
@@ -101,7 +101,7 @@
               <span class="form-label tax-label mb-0 text-end">Percepciones y otros</span>
               <div class="tax-field tax-field-amount">
                 <span class="tax-symbol tax-symbol-currency">$</span>
-                <input type="text" name="retenciones" class="form-control tax-amount text-end" aria-label="Monto de Percepciones y otros">
+                <input type="text" name="percepciones" class="form-control tax-amount text-end" aria-label="Monto de Percepciones y otros">
               </div>
             </div>
           </div>

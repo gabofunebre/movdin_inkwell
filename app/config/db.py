@@ -55,27 +55,32 @@ def _apply_schema_upgrades() -> None:
             return
 
         columns = {col["name"] for col in inspector.get_columns("invoices", schema=schema)}
-        if "retenciones" not in columns:
-            table = _qualified_table("invoices")
-            if engine.dialect.name == "postgresql":
+        table = _qualified_table("invoices")
+        if "percepciones" not in columns:
+            if "retenciones" in columns:
                 conn.execute(
-                    text(
-                        f"ALTER TABLE {table} "
-                        "ADD COLUMN retenciones NUMERIC(12, 2) DEFAULT 0 NOT NULL"
-                    )
+                    text(f"ALTER TABLE {table} RENAME COLUMN retenciones TO percepciones")
                 )
             else:
-                conn.execute(
-                    text(
-                        f"ALTER TABLE {table} "
-                        "ADD COLUMN retenciones NUMERIC(12, 2) DEFAULT 0"
+                if engine.dialect.name == "postgresql":
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table} "
+                            "ADD COLUMN percepciones NUMERIC(12, 2) DEFAULT 0 NOT NULL"
+                        )
                     )
-                )
+                else:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table} "
+                            "ADD COLUMN percepciones NUMERIC(12, 2) DEFAULT 0"
+                        )
+                    )
 
             conn.execute(
                 text(
-                    f"UPDATE {table} SET retenciones = 0 "
-                    "WHERE retenciones IS NULL"
+                    f"UPDATE {table} SET percepciones = 0 "
+                    "WHERE percepciones IS NULL"
                 )
             )
 

@@ -50,9 +50,9 @@ async function toggleDetails(row, acc) {
   const ivaBalance = summary.is_billing
     ? Number(summary.iva_purchases) - Number(summary.iva_sales)
     : 0;
-  const retencionesTotal = summary.is_billing ? Number(summary.retenciones) : 0;
+  const percepcionesTotal = summary.is_billing ? Number(summary.percepciones) : 0;
   const total = summary.is_billing
-    ? balance + ivaBalance - Number(summary.iibb) + retencionesTotal
+    ? balance + ivaBalance - Number(summary.iibb) + percepcionesTotal
     : balance;
 
   let html = '<div class="container text-start">';
@@ -69,7 +69,7 @@ async function toggleDetails(row, acc) {
     html += `<p><strong>IVA Ventas:</strong> <span class="text-danger">${symbol} ${formatCurrency(summary.iva_sales)}</span></p>`;
     html += `<p><strong>Balance IVA:</strong> <span class="text-dark fst-italic">${symbol} ${formatCurrency(ivaBalance)}</span></p>`;
     html += `<p><strong>SIRCREB:</strong> <span class="text-danger">${symbol} ${formatCurrency(summary.iibb)}</span></p>`;
-    html += `<p><strong>Percepciones y otros:</strong> <span class="text-success">${symbol} ${formatCurrency(summary.retenciones)}</span></p>`;
+    html += `<p><strong>Percepciones y otros:</strong> <span class="text-success">${symbol} ${formatCurrency(summary.percepciones)}</span></p>`;
     html += '</div>';
   }
   html += '</div>';
