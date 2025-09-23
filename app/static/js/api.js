@@ -70,14 +70,29 @@ export async function deleteTransaction(id) {
 }
 
 export async function syncBillingTransactions() {
-  let data = null;
   try {
     const res = await fetch('/transactions/billing/sync', { method: 'POST' });
+    let data = null;
+    let rawText = null;
     try {
-      data = await res.json();
-    } catch (_) {}
-    if (res.ok) return { ok: true, data };
-    const errorDetail = data?.detail || data?.message;
+      data = await res.clone().json();
+    } catch (_) {
+      try {
+        rawText = await res.clone().text();
+      } catch (_) {}
+    }
+    if (res.ok) return { ok: true, data: data ?? rawText };
+    const statusInfo = res.statusText
+      ? `${res.status} ${res.statusText}`.trim()
+      : res.status
+      ? `Código ${res.status}`
+      : null;
+    const errorDetail =
+      data?.detail ||
+      data?.message ||
+      (typeof data === 'string' ? data : null) ||
+      rawText ||
+      statusInfo;
     return {
       ok: false,
       error:
@@ -85,10 +100,14 @@ export async function syncBillingTransactions() {
         'No se pudieron obtener los movimientos de la cuenta de facturación'
     };
   } catch (err) {
+    const baseMessage =
+      'No se pudieron obtener los movimientos de la cuenta de facturación';
+    const messageFromError = err?.message && String(err.message).trim();
     return {
       ok: false,
-      error:
-        'No se pudieron obtener los movimientos de la cuenta de facturación'
+      error: messageFromError
+        ? `${baseMessage}: ${messageFromError}`
+        : baseMessage
     };
   }
 }
