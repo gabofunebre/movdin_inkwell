@@ -19,7 +19,7 @@ const form = document.getElementById('cert-form');
 const modalTitle = document.getElementById('cert-form-title');
 const alertBox = document.getElementById('cert-alert');
 const amountInput = form.amount;
-const withheldTaxInput = form.elements['withheld_tax'] || form.concept;
+const taxTypeSelect = form.elements['retained_tax_type_id'];
 const isAdmin = Boolean(window.isAdmin);
 const columnCount = table.querySelectorAll('thead th').length;
 const currencyCode = window.certCurrency || 'ARS';
@@ -31,11 +31,23 @@ let activeActionRow = null;
 let activeDataRow = null;
 
 function normalizeCertificate(cert) {
-  const withheldTax = cert.withheld_tax ?? cert.concept ?? '';
+  const taxType = cert.retained_tax_type ?? cert.tax_type ?? null;
+  const taxTypeId =
+    cert.retained_tax_type_id ?? (taxType ? taxType.id : null);
+  const taxTypeName = taxType?.name ?? cert.withheld_tax ?? '';
+  const numericTaxTypeId =
+    typeof taxTypeId === 'number'
+      ? taxTypeId
+      : taxTypeId
+      ? Number(taxTypeId)
+      : null;
   return {
     ...cert,
     amount: Number(cert.amount),
-    withheld_tax: withheldTax
+    retained_tax_type: taxType ?? null,
+    retained_tax_type_id: numericTaxTypeId,
+    withheld_tax: taxTypeName,
+    tax_type_name: taxTypeName
   };
 }
 
@@ -63,7 +75,9 @@ function clearActionRow() {
 }
 
 function populateTaxTypeSelect(selectedId = '', selectedType = null) {
+  if (!taxTypeSelect) return;
   taxTypeSelect.innerHTML = '';
+  taxTypeSelect.disabled = retainedTaxTypes.length === 0;
   const placeholder = document.createElement('option');
   placeholder.value = '';
   placeholder.textContent = 'Seleccione un impuesto retenido';
@@ -172,11 +186,11 @@ function renderCertificates() {
   const filtered = certificates.filter(cert => {
     const number = cert.number?.toLowerCase() || '';
     const invoiceRef = cert.invoice_reference?.toLowerCase() || '';
-    const withheldTax = (cert.withheld_tax ?? cert.concept)?.toLowerCase() || '';
+    const taxType = cert.tax_type_name?.toLowerCase() || '';
     return (
       number.includes(query) ||
       invoiceRef.includes(query) ||
-      withheldTax.includes(query)
+      taxType.includes(query)
     );
   });
   filtered.sort((a, b) => {
@@ -204,7 +218,7 @@ function renderCertificates() {
     refTd.textContent = cert.invoice_reference;
 
     const taxTd = document.createElement('td');
-    taxTd.textContent = cert.withheld_tax ?? cert.concept ?? '';
+    taxTd.textContent = cert.tax_type_name || '';
 
     const amountTd = document.createElement('td');
     amountTd.className = 'text-end';
@@ -235,9 +249,7 @@ function openCreateModal() {
   setDateLimits();
   form.date.value = form.date.max;
   amountInput.value = '';
-  if (withheldTaxInput) {
-    withheldTaxInput.value = '';
-  }
+  populateTaxTypeSelect();
   clearError();
   certModal.show();
 }
@@ -252,9 +264,13 @@ function openEditModal(cert) {
   form.date.value = cert.date;
   form.number.value = cert.number;
   form.invoice_reference.value = cert.invoice_reference;
-  if (withheldTaxInput) {
-    withheldTaxInput.value = cert.withheld_tax ?? cert.concept ?? '';
-  }
+  const selectedType = cert.retained_tax_type ?? cert.tax_type ?? null;
+  const selectedId =
+    cert.retained_tax_type_id ?? (selectedType ? selectedType.id : '');
+  populateTaxTypeSelect(
+    selectedId === null || selectedId === undefined ? '' : String(selectedId),
+    selectedType
+  );
   amountInput.value = formatCurrency(Math.abs(Number(cert.amount)));
   clearError();
   certModal.show();
@@ -268,6 +284,8 @@ async function loadData() {
       fetchRetainedTaxTypes()
     ]);
     retainedTaxTypes = Array.isArray(taxData) ? taxData : [];
+    const currentSelection = taxTypeSelect ? taxTypeSelect.value : '';
+    populateTaxTypeSelect(currentSelection);
     updateTaxTypeAvailability();
     certificates = Array.isArray(certData)
       ? certData.map(normalizeCertificate)
@@ -297,9 +315,10 @@ form.addEventListener('submit', async event => {
   const payload = {
     date: form.date.value,
     number: form.number.value.trim(),
-    invoice_reference: form.invoice_reference.value.trim(),
-    concept: withheldTaxInput ? withheldTaxInput.value.trim() : ''
+    invoice_reference: form.invoice_reference.value.trim()
   };
+
+  const selectedTaxTypeId = taxTypeSelect ? taxTypeSelect.value : '';
 
   const amountValue = parseDecimal(amountInput.value);
   if (!Number.isFinite(amountValue) || amountValue <= 0) {
@@ -311,19 +330,18 @@ form.addEventListener('submit', async event => {
   if (
     !payload.number ||
     !payload.invoice_reference ||
-    !payload.concept ||
     !payload.date
   ) {
     showError('Todos los campos son obligatorios');
     return;
   }
 
-  if (!taxTypeId) {
+  if (!selectedTaxTypeId) {
     showError('Seleccione un impuesto retenido');
     return;
   }
 
-  payload.retained_tax_type_id = taxTypeId;
+  payload.retained_tax_type_id = Number(selectedTaxTypeId);
 
   showOverlay();
   try {
