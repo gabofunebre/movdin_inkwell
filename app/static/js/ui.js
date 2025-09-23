@@ -120,12 +120,15 @@ export function renderInvoice(tbody, inv, accountMap) {
   tbody.appendChild(tr);
 }
 
-export function populateAccounts(select, accounts) {
+export function populateAccounts(select, accounts, selectedId = null) {
   select.innerHTML = '';
   accounts.forEach(acc => {
     const opt = document.createElement('option');
     opt.value = acc.id;
     opt.textContent = `${acc.name} (${acc.currency})`;
+    if (selectedId !== null && acc.id === selectedId) {
+      opt.selected = true;
+    }
     select.appendChild(opt);
   });
 }

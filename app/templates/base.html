@@ -28,6 +28,13 @@
         </ul>
       </div>
       {% endif %}
+      {% if billing_account and show_billing_sync_button %}
+      <button id="billing-sync-button" type="button"
+        class="btn btn-sm ms-3"
+        style="--bs-btn-color: {{ billing_account.color }}; --bs-btn-border-color: {{ billing_account.color }}; --bs-btn-hover-color: {{ billing_account.color }}; --bs-btn-hover-border-color: {{ billing_account.color }}; --bs-btn-hover-bg: rgba(255,255,255,0.15); border-color: {{ billing_account.color }}; color: {{ billing_account.color }}; background-color: transparent;">
+        Traer movimientos para: {{ billing_account.name }}
+      </button>
+      {% endif %}
     </div>
     <h1 class="h3 m-0">{{ header_title|safe }}</h1>
     <a href="/" id="logo-link" class="position-absolute">

@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Integer,
+    BigInteger,
     String,
     Numeric,
     Boolean,
@@ -29,6 +30,15 @@ class Account(Base):
     color: Mapped[str] = mapped_column(String(7), default="#000000")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_billing: Mapped[bool] = mapped_column(Boolean, default=False)
+    billing_last_checkpoint_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    billing_last_confirmed_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    billing_synced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -49,6 +59,9 @@ class Transaction(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     notes: Mapped[str] = mapped_column(Text, default="")
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False)
+    billing_transaction_id: Mapped[int | None] = mapped_column(
+        BigInteger, unique=True, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

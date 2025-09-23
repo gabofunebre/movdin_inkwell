@@ -192,6 +192,80 @@ def _apply_schema_upgrades() -> None:
                         )
                     )
 
+        if "accounts" in table_names:
+            columns = {
+                col["name"] for col in inspector.get_columns("accounts", schema=schema)
+            }
+            table = _qualified_table("accounts")
+            if "billing_last_checkpoint_id" not in columns:
+                col_type = "BIGINT" if engine.dialect.name == "postgresql" else "INTEGER"
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} "
+                        f"ADD COLUMN billing_last_checkpoint_id {col_type}"
+                    )
+                )
+            if "billing_last_confirmed_id" not in columns:
+                col_type = "BIGINT" if engine.dialect.name == "postgresql" else "INTEGER"
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} "
+                        f"ADD COLUMN billing_last_confirmed_id {col_type}"
+                    )
+                )
+            if "billing_synced_at" not in columns:
+                if engine.dialect.name == "postgresql":
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table} "
+                            "ADD COLUMN billing_synced_at TIMESTAMPTZ"
+                        )
+                    )
+                else:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table} "
+                            "ADD COLUMN billing_synced_at DATETIME"
+                        )
+                    )
+
+        if "transactions" in table_names:
+            columns = {
+                col["name"]
+                for col in inspector.get_columns("transactions", schema=schema)
+            }
+            table = _qualified_table("transactions")
+            if "billing_transaction_id" not in columns:
+                col_type = "BIGINT" if engine.dialect.name == "postgresql" else "INTEGER"
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} "
+                        f"ADD COLUMN billing_transaction_id {col_type}"
+                    )
+                )
+            indexes = {
+                idx["name"] for idx in inspector.get_indexes("transactions", schema=schema)
+            }
+            index_name = "ux_transactions_billing_transaction_id"
+            if index_name not in indexes:
+                if engine.dialect.name == "postgresql":
+                    conn.execute(
+                        text(
+                            f"CREATE UNIQUE INDEX {index_name} "
+                            f"ON {table}(billing_transaction_id) "
+                            "WHERE billing_transaction_id IS NOT NULL"
+                        )
+                    )
+                else:
+                    conn.execute(
+                        text(
+                            f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} "
+                            f"ON {table}(billing_transaction_id) "
+                            "WHERE billing_transaction_id IS NOT NULL"
+                        )
+                    )
+
+
 def get_db():
     db = SessionLocal()
     try:

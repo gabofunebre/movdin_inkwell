@@ -90,7 +90,10 @@ app.mount(
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request, user=Depends(get_current_user)):
+async def index(
+    request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    billing_account = db.query(Account).filter(Account.is_billing.is_(True)).first()
     return templates.TemplateResponse(
         "index.html",
         {
@@ -98,6 +101,8 @@ async def index(request: Request, user=Depends(get_current_user)):
             "title": "Movimientos",
             "header_title": "Movimientos de dinero",
             "user": user,
+            "billing_account": billing_account,
+            "show_billing_sync_button": True,
         },
     )
 

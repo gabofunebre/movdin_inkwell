@@ -11,14 +11,14 @@ import {
   createRetainedTaxType,
   updateRetainedTaxType,
   deleteRetainedTaxType
-} from './api.js?v=1';
+} from './api.js?v=2';
 import {
   renderAccount,
   renderFrequent,
   renderRetainedTaxType,
   showOverlay,
   hideOverlay,
-} from './ui.js?v=1';
+} from './ui.js?v=2';
 import { CURRENCIES } from './constants.js';
 import { sanitizeDecimalInput, parseDecimal, formatCurrency } from './money.js?v=1';
 

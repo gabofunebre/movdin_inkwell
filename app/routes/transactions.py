@@ -1,13 +1,16 @@
-from datetime import date
+import os
+from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import List
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from config.db import get_db
-from models import Transaction
+from models import Account, Transaction
 from auth import require_admin
 from schemas import TransactionCreate, TransactionOut
 
@@ -20,6 +23,17 @@ def create_tx(payload: TransactionCreate, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se permiten fechas futuras",
+        )
+    account = db.get(Account, payload.account_id)
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cuenta no encontrada",
+        )
+    if account.is_billing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se permiten movimientos manuales para la cuenta de facturación",
         )
     tx = Transaction(**payload.dict())
     db.add(tx)
@@ -65,3 +79,357 @@ def delete_tx(tx_id: int, db: Session = Depends(get_db)):
         db.delete(tx)
         db.commit()
     return Response(status_code=204)
+
+
+@router.post("/billing/sync")
+def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
+    billing_account = db.scalar(select(Account).where(Account.is_billing == True))
+    if not billing_account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No hay una cuenta de facturación configurada",
+        )
+
+    base_url = os.getenv("FACTURACION_RUTA_DATA")
+    api_key = os.getenv("BILLING_API_KEY")
+    if not base_url:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="FACTURACION_RUTA_DATA no está configurado",
+        )
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="BILLING_API_KEY no está configurado",
+        )
+
+    endpoint = _build_billing_endpoint(base_url)
+    headers = {"X-API-Key": api_key}
+    page_size = max(1, min(limit or 100, 500))
+
+    transactions_data, last_response = _fetch_billing_transactions(
+        endpoint, headers, page_size
+    )
+
+    unique_transactions: list[tuple[int, dict]] = []
+    seen_ids: set[int] = set()
+    for item in transactions_data:
+        try:
+            remote_id = int(item["id"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Movimiento recibido sin identificador válido",
+            ) from exc
+        if remote_id in seen_ids:
+            continue
+        seen_ids.add(remote_id)
+        unique_transactions.append((remote_id, item))
+
+    existing_ids: set[int] = set()
+    if seen_ids:
+        existing_ids = {
+            value
+            for value in db.scalars(
+                select(Transaction.billing_transaction_id)
+                .where(Transaction.account_id == billing_account.id)
+                .where(Transaction.billing_transaction_id.in_(seen_ids))
+            ).all()
+            if value is not None
+        }
+
+    new_transactions: list[Transaction] = []
+    skipped = 0
+    for remote_id, item in unique_transactions:
+        if remote_id in existing_ids:
+            skipped += 1
+            continue
+        tx_date = _parse_remote_date(item.get("date"), remote_id)
+        amount = _parse_remote_amount(item.get("amount"), remote_id)
+        description = (item.get("description") or "").strip()
+        notes = item.get("notes") or ""
+        new_transactions.append(
+            Transaction(
+                account_id=billing_account.id,
+                date=tx_date,
+                description=description,
+                amount=amount,
+                notes=notes,
+                billing_transaction_id=remote_id,
+            )
+        )
+
+    latest_checkpoint = _parse_remote_identifier(
+        last_response.get("checkpoint_id"), "checkpoint_id"
+    )
+    last_confirmed = _parse_remote_identifier(
+        last_response.get("last_confirmed_id"), "last_confirmed_id"
+    )
+    confirm_needed = (
+        latest_checkpoint is not None
+        and (
+            last_confirmed is None
+            or latest_checkpoint != last_confirmed
+            or bool(new_transactions)
+            or skipped > 0
+        )
+    )
+
+    now = datetime.now(timezone.utc)
+    billing_account.billing_last_checkpoint_id = latest_checkpoint
+    if last_confirmed is not None:
+        billing_account.billing_last_confirmed_id = last_confirmed
+    billing_account.billing_synced_at = now
+
+    try:
+        for tx in new_transactions:
+            db.add(tx)
+
+        confirm_data = None
+        if confirm_needed:
+            confirm_data = _confirm_billing_checkpoint(
+                endpoint, headers, latest_checkpoint
+            )
+            if confirm_data:
+                new_confirmed = _parse_remote_identifier(
+                    confirm_data.get("last_transaction_id"), "last_transaction_id"
+                )
+                if new_confirmed is not None:
+                    billing_account.billing_last_confirmed_id = new_confirmed
+                updated_at = confirm_data.get("updated_at")
+                parsed_updated = (
+                    _parse_remote_timestamp(updated_at) if updated_at else None
+                )
+                if parsed_updated:
+                    billing_account.billing_synced_at = parsed_updated
+                else:
+                    billing_account.billing_synced_at = now
+
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:  # pragma: no cover - defensive
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No se pudieron guardar los movimientos de facturación",
+        ) from exc
+
+    inserted = len(new_transactions)
+    confirmed = confirm_needed
+    message = _build_sync_message(inserted, skipped, confirmed)
+
+    return {
+        "inserted": inserted,
+        "skipped": skipped,
+        "fetched": len(unique_transactions),
+        "checkpoint_id": billing_account.billing_last_checkpoint_id,
+        "last_confirmed_id": billing_account.billing_last_confirmed_id,
+        "synced_at": billing_account.billing_synced_at.isoformat()
+        if billing_account.billing_synced_at
+        else None,
+        "message": message,
+    }
+
+
+def _build_billing_endpoint(base_url: str) -> str:
+    trimmed = base_url.rstrip("/")
+    if trimmed.endswith("movimientos_cuenta_facturada"):
+        return trimmed
+    return f"{trimmed}/movimientos_cuenta_facturada"
+
+
+def _fetch_billing_transactions(
+    endpoint: str, headers: dict[str, str], limit: int
+) -> tuple[list[dict], dict]:
+    remote_transactions: list[dict] = []
+    last_response: dict | None = None
+    cursor: int | None = None
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            while True:
+                params = {"limit": limit}
+                if cursor is not None:
+                    params["checkpoint_id"] = cursor
+                response = client.get(endpoint, params=params, headers=headers)
+                payload = _handle_billing_response(response)
+                last_response = payload
+                transactions = payload.get("transactions") or []
+                if not isinstance(transactions, list):
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="Respuesta inválida del servicio de facturación",
+                    )
+                remote_transactions.extend(transactions)
+                if not payload.get("has_more"):
+                    break
+                cursor = payload.get("checkpoint_id")
+                if cursor is None:
+                    break
+    except HTTPException:
+        raise
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="No se pudo conectar con el servicio de facturación",
+        ) from exc
+
+    if last_response is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Respuesta vacía del servicio de facturación",
+        )
+
+    return remote_transactions, last_response
+
+
+def _handle_billing_response(response: httpx.Response) -> dict:
+    if response.status_code == status.HTTP_403_FORBIDDEN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado por el servicio de facturación",
+        )
+    if response.status_code == status.HTTP_404_NOT_FOUND:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="El servicio de facturación no encontró movimientos para la cuenta configurada",
+        )
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=_extract_remote_error(response),
+        )
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Respuesta inválida del servicio de facturación",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Respuesta inválida del servicio de facturación",
+        )
+    return payload
+
+
+def _extract_remote_error(response: httpx.Response) -> str:
+    try:
+        data = response.json()
+    except ValueError:
+        return f"Error del servicio de facturación ({response.status_code})"
+    if isinstance(data, dict):
+        for key in ("detail", "message", "error"):
+            value = data.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return f"Error del servicio de facturación ({response.status_code})"
+
+
+def _confirm_billing_checkpoint(
+    endpoint: str, headers: dict[str, str], checkpoint_id: int | None
+) -> dict | None:
+    if checkpoint_id is None:
+        return None
+    try:
+        response = httpx.post(
+            endpoint,
+            json={"checkpoint_id": checkpoint_id},
+            headers=headers,
+            timeout=30.0,
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="No se pudo confirmar el checkpoint de facturación",
+        ) from exc
+    return _handle_billing_response(response)
+
+
+def _parse_remote_date(value: object, remote_id: int) -> date:
+    if not value:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Fecha faltante para el movimiento {remote_id}",
+        )
+    if isinstance(value, str):
+        cleaned = value.strip()
+        try:
+            if "T" in cleaned:
+                cleaned = cleaned.replace("Z", "+00:00")
+                return datetime.fromisoformat(cleaned).date()
+            return date.fromisoformat(cleaned)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Fecha inválida para el movimiento {remote_id}",
+            ) from exc
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail=f"Fecha inválida para el movimiento {remote_id}",
+    )
+
+
+def _parse_remote_amount(value: object, remote_id: int) -> Decimal:
+    if value is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Monto faltante para el movimiento {remote_id}",
+        )
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Monto inválido para el movimiento {remote_id}",
+        ) from exc
+    return amount
+
+
+def _parse_remote_identifier(value: object, field_name: str) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Valor inválido para {field_name} en la respuesta de facturación",
+        ) from exc
+
+
+def _parse_remote_timestamp(value: object) -> datetime | None:
+    if not value:
+        return None
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if cleaned.endswith("Z"):
+        cleaned = cleaned[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(cleaned)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _build_sync_message(inserted: int, skipped: int, confirmed: bool) -> str:
+    if inserted:
+        return (
+            "Se incorporó 1 movimiento de facturación."
+            if inserted == 1
+            else f"Se incorporaron {inserted} movimientos de facturación."
+        )
+    if confirmed and skipped:
+        return (
+            "Los movimientos pendientes ya estaban registrados y se confirmó el checkpoint."
+        )
+    if confirmed:
+        return "Se confirmó el último checkpoint de facturación."
+    return "No hay movimientos nuevos para la cuenta de facturación."

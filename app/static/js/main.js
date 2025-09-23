@@ -4,14 +4,15 @@ import {
   createTransaction,
   fetchFrequents,
   updateTransaction,
-  deleteTransaction
-} from './api.js?v=1';
+  deleteTransaction,
+  syncBillingTransactions
+} from './api.js?v=2';
 import {
   renderTransaction,
   populateAccounts,
   showOverlay,
   hideOverlay,
-} from './ui.js?v=1';
+} from './ui.js?v=2';
 import { sanitizeDecimalInput, parseDecimal, formatCurrency } from './money.js?v=1';
 
 const tbody = document.querySelector('#tx-table tbody');
@@ -26,6 +27,7 @@ const freqCheck = document.getElementById('freq-check');
 const freqSelect = document.getElementById('freq-select');
 const descInput = document.getElementById('desc-input');
 const amountInput = form.amount;
+const billingSyncButton = document.getElementById('billing-sync-button');
 
 let offset = 0;
 const limit = 50;
@@ -82,7 +84,9 @@ function openModal(type) {
   form.reset();
   amountInput.value = '';
   document.getElementById('form-title').textContent = type === 'income' ? 'Nuevo Ingreso' : 'Nuevo Egreso';
-  populateAccounts(form.account_id, accounts.filter(a => a.is_active));
+  const availableAccounts = accounts.filter(a => a.is_active && !a.is_billing);
+  populateAccounts(form.account_id, availableAccounts);
+  form.account_id.disabled = availableAccounts.length === 0;
   form.dataset.type = type;
   form.dataset.mode = 'create';
   delete form.dataset.id;
@@ -100,7 +104,12 @@ function openEditModal(tx) {
   form.reset();
   const isIncome = tx.amount >= 0;
   document.getElementById('form-title').textContent = isIncome ? 'Editar Ingreso' : 'Editar Egreso';
-  populateAccounts(form.account_id, accounts.filter(a => a.is_active));
+  const availableAccounts = accounts.filter(
+    a =>
+      a.is_active && (!a.is_billing || a.id === tx.account_id)
+  );
+  populateAccounts(form.account_id, availableAccounts, tx.account_id);
+  form.account_id.disabled = availableAccounts.length === 0;
   form.dataset.type = isIncome ? 'income' : 'expense';
   form.dataset.mode = 'edit';
   form.dataset.id = tx.id;
@@ -264,3 +273,30 @@ form.addEventListener('submit', async e => {
   await loadMore();
   updateSortIcons();
 })();
+
+if (billingSyncButton) {
+  const originalLabel = billingSyncButton.textContent;
+  billingSyncButton.addEventListener('click', async () => {
+    if (billingSyncButton.disabled) return;
+    billingSyncButton.disabled = true;
+    const spinnerColor = billingSyncButton.style.color || '#0d6efd';
+    billingSyncButton.innerHTML =
+      `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="color:${spinnerColor}"></span>` +
+      'Sincronizando...';
+    showOverlay();
+    const result = await syncBillingTransactions();
+    hideOverlay();
+    billingSyncButton.disabled = false;
+    billingSyncButton.textContent = originalLabel;
+    if (result.ok) {
+      transactions = [];
+      offset = 0;
+      await loadMore();
+      if (result.data?.message) {
+        alert(result.data.message);
+      }
+    } else if (result.error) {
+      alert(result.error);
+    }
+  });
+}

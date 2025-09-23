@@ -1,5 +1,5 @@
-import { fetchAccountBalances, fetchAccountSummary } from './api.js?v=1';
-import { showOverlay, hideOverlay, formatCurrency } from './ui.js?v=1';
+import { fetchAccountBalances, fetchAccountSummary } from './api.js?v=2';
+import { showOverlay, hideOverlay, formatCurrency } from './ui.js?v=2';
 import { CURRENCY_SYMBOLS } from './constants.js';
 
 const tbody = document.querySelector('#accounts-table tbody');
