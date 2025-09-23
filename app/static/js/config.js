@@ -6,11 +6,16 @@ import {
   fetchFrequents,
   createFrequent,
   updateFrequent,
-  deleteFrequent
+  deleteFrequent,
+  fetchRetainedTaxTypes,
+  createRetainedTaxType,
+  updateRetainedTaxType,
+  deleteRetainedTaxType
 } from './api.js?v=1';
 import {
   renderAccount,
   renderFrequent,
+  renderRetainedTaxType,
   showOverlay,
   hideOverlay,
 } from './ui.js?v=1';
@@ -50,6 +55,21 @@ const freqConfirmMessage = freqConfirmEl.querySelector('#confirm-freq-message');
 const freqConfirmBtn = freqConfirmEl.querySelector('#confirm-freq-yes');
 let freqToDelete = null;
 let frequents = [];
+
+const taxTbody = document.querySelector('#tax-table tbody');
+const taxModalEl = document.getElementById('taxModal');
+const taxModal = new bootstrap.Modal(taxModalEl);
+const taxForm = document.getElementById('tax-form');
+const addTaxBtn = document.getElementById('add-tax-type');
+const taxAlertBox = document.getElementById('tax-alert');
+const taxIdField = taxForm.querySelector('input[name="id"]');
+const taxModalTitle = taxModalEl.querySelector('.modal-title');
+const taxConfirmEl = document.getElementById('confirmTaxModal');
+const taxConfirmModal = new bootstrap.Modal(taxConfirmEl);
+const taxConfirmMessage = taxConfirmEl.querySelector('#confirm-tax-message');
+const taxConfirmBtn = taxConfirmEl.querySelector('#confirm-tax-yes');
+let taxToDelete = null;
+let retainedTaxTypes = [];
 
 function populateCurrencies() {
   currencySelect.innerHTML = '';
@@ -257,4 +277,75 @@ freqConfirmBtn.addEventListener('click', async () => {
   }
   freqToDelete = null;
 });
-loadAccounts().then(() => loadFrequents());
+
+addTaxBtn.addEventListener('click', () => {
+  taxForm.reset();
+  taxIdField.value = '';
+  taxAlertBox.classList.add('d-none');
+  taxModalTitle.textContent = 'Nuevo impuesto retenido';
+  taxModal.show();
+});
+
+taxForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!taxForm.reportValidity()) return;
+  const data = new FormData(taxForm);
+  const payload = { name: data.get('name') };
+  showOverlay();
+  let result;
+  if (taxIdField.value) {
+    result = await updateRetainedTaxType(taxIdField.value, payload);
+  } else {
+    result = await createRetainedTaxType(payload);
+  }
+  hideOverlay();
+  taxAlertBox.classList.remove('d-none', 'alert-success', 'alert-danger');
+  if (result.ok) {
+    taxAlertBox.classList.add('alert-success');
+    taxAlertBox.textContent = 'Impuesto retenido guardado';
+    await loadRetainedTaxTypes();
+  } else {
+    taxAlertBox.classList.add('alert-danger');
+    taxAlertBox.textContent = result.error || 'Error al guardar';
+  }
+});
+
+async function loadRetainedTaxTypes() {
+  retainedTaxTypes = await fetchRetainedTaxTypes();
+  taxTbody.innerHTML = '';
+  retainedTaxTypes.forEach(tax => {
+    renderRetainedTaxType(taxTbody, tax, startEditTax, removeTaxType);
+  });
+}
+
+function startEditTax(tax) {
+  taxForm.reset();
+  taxForm.name.value = tax.name;
+  taxIdField.value = tax.id;
+  taxAlertBox.classList.add('d-none');
+  taxModalTitle.textContent = 'Editar impuesto retenido';
+  taxModal.show();
+}
+
+async function removeTaxType(tax) {
+  taxToDelete = tax;
+  taxConfirmMessage.textContent = `¿Eliminar impuesto retenido "${tax.name}"?`;
+  taxConfirmModal.show();
+}
+
+taxConfirmBtn.addEventListener('click', async () => {
+  if (!taxToDelete) return;
+  taxConfirmModal.hide();
+  showOverlay();
+  const result = await deleteRetainedTaxType(taxToDelete.id);
+  hideOverlay();
+  if (result.ok) {
+    taxTbody.innerHTML = '';
+    await loadRetainedTaxTypes();
+  } else {
+    alert(result.error || 'Error al eliminar');
+  }
+  taxToDelete = null;
+});
+
+loadAccounts().then(() => Promise.all([loadFrequents(), loadRetainedTaxTypes()]));

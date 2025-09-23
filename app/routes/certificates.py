@@ -5,11 +5,11 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from auth import require_admin
 from config.db import get_db
-from models import RetentionCertificate
+from models import RetainedTaxType, RetentionCertificate
 from schemas import RetentionCertificateCreate, RetentionCertificateOut
 
 router = APIRouter(prefix="/retention-certificates")
@@ -24,17 +24,24 @@ def create_certificate(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se permiten fechas futuras",
         )
+    tax_type = db.get(RetainedTaxType, payload.retained_tax_type_id)
+    if not tax_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Impuesto retenido inválido",
+        )
     amount = abs(payload.amount).quantize(Decimal("0.01"))
     cert = RetentionCertificate(
         number=payload.number,
         date=payload.date,
         invoice_reference=payload.invoice_reference,
-        concept=payload.concept,
+        retained_tax_type_id=tax_type.id,
         amount=amount,
     )
     db.add(cert)
     db.commit()
     db.refresh(cert)
+    cert.tax_type = tax_type
     return cert
 
 
@@ -44,6 +51,7 @@ def list_certificates(
 ):
     stmt = (
         select(RetentionCertificate)
+        .options(selectinload(RetentionCertificate.tax_type))
         .order_by(RetentionCertificate.date.desc(), RetentionCertificate.id.desc())
         .limit(limit)
         .offset(offset)
@@ -69,15 +77,22 @@ def update_certificate(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se permiten fechas futuras",
         )
+    tax_type = db.get(RetainedTaxType, payload.retained_tax_type_id)
+    if not tax_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Impuesto retenido inválido",
+        )
     amount = abs(payload.amount).quantize(Decimal("0.01"))
     cert.number = payload.number
     cert.date = payload.date
     cert.invoice_reference = payload.invoice_reference
-    cert.concept = payload.concept
+    cert.retained_tax_type_id = tax_type.id
     cert.amount = amount
     db.add(cert)
     db.commit()
     db.refresh(cert)
+    cert.tax_type = tax_type
     return cert
 
 

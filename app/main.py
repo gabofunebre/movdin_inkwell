@@ -18,6 +18,7 @@ from routes.transactions import router as transactions_router
 from routes.frequents import router as frequents_router
 from routes.invoices import router as invoices_router
 from routes.certificates import router as certificates_router
+from routes.retained_taxes import router as retained_taxes_router
 from routes.users import router as users_router
 from routes.billing_info import router as billing_info_router
 
@@ -79,6 +80,7 @@ app.include_router(invoices_router)
 app.include_router(users_router)
 app.include_router(billing_info_router)
 app.include_router(certificates_router)
+app.include_router(retained_taxes_router)
 
 app.mount(
     "/static",
