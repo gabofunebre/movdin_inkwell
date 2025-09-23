@@ -87,11 +87,34 @@ export async function syncBillingTransactions() {
       : res.status
       ? `Código ${res.status}`
       : null;
+    const rawTextTrimmed =
+      typeof rawText === 'string' ? rawText.trim() : null;
+    let plainRawText = null;
+    if (rawTextTrimmed) {
+      const htmlIndicatorPatterns = [
+        /<!doctype/i,
+        /<\s*html[\s>]/i,
+        /<\s*\/\s*html[\s>]/i,
+        /<\s*body[\s>]/i,
+        /<\s*\/\s*body[\s>]/i,
+        /<\s*head[\s>]/i,
+        /<\s*\/\s*head[\s>]/i,
+        /<\?xml/i
+      ];
+      const containsHtmlIndicator = htmlIndicatorPatterns.some(pattern =>
+        pattern.test(rawTextTrimmed)
+      );
+      const closingTagPattern = /<\s*\/\s*(?:html|body|head)\b[^>]*>/i;
+      const hasClosingTag = closingTagPattern.test(rawTextTrimmed);
+      if (!containsHtmlIndicator && !hasClosingTag) {
+        plainRawText = rawTextTrimmed;
+      }
+    }
     const errorDetail =
       data?.detail ||
       data?.message ||
       (typeof data === 'string' ? data : null) ||
-      rawText ||
+      plainRawText ||
       statusInfo;
     return {
       ok: false,
