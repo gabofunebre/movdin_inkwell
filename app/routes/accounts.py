@@ -173,9 +173,11 @@ def account_balances(to_date: date | None = None, db: Session = Depends(get_db))
                 ),
                 0,
             ).label("percepciones"),
-        ).group_by(Invoice.account_id)
+        )
+        .where(Invoice.date <= bindparam("to_date"))
+        .group_by(Invoice.account_id)
     )
-    tax_rows = db.execute(tax_stmt).all()
+    tax_rows = db.execute(tax_stmt, {"to_date": to_date}).all()
     tax_map = {r.account_id: r for r in tax_rows}
 
     balances = []
