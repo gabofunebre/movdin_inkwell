@@ -265,3 +265,55 @@ export async function deleteFrequent(id) {
   } catch (_) {}
   return { ok: false, error };
 }
+
+export async function fetchRetainedTaxTypes() {
+  const res = await fetch('/retained-tax-types');
+  return res.json();
+}
+
+export async function createRetainedTaxType(payload) {
+  const res = await fetch('/retained-tax-types', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) {
+    const taxType = await res.json();
+    return { ok: true, taxType };
+  }
+  let error = 'Error al guardar';
+  try {
+    const data = await res.json();
+    error = data.detail || error;
+  } catch (_) {}
+  return { ok: false, error };
+}
+
+export async function updateRetainedTaxType(id, payload) {
+  const res = await fetch(`/retained-tax-types/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) {
+    const taxType = await res.json();
+    return { ok: true, taxType };
+  }
+  let error = 'Error al guardar';
+  try {
+    const data = await res.json();
+    error = data.detail || error;
+  } catch (_) {}
+  return { ok: false, error };
+}
+
+export async function deleteRetainedTaxType(id) {
+  const res = await fetch(`/retained-tax-types/${id}`, { method: 'DELETE' });
+  if (res.ok) return { ok: true };
+  let error = 'Error al eliminar';
+  try {
+    const data = await res.json();
+    error = data.detail || error;
+  } catch (_) {}
+  return { ok: false, error };
+}
