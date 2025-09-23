@@ -51,38 +51,146 @@ def _apply_schema_upgrades() -> None:
 
     with engine.begin() as conn:
         inspector = inspect(conn)
-        if "invoices" not in inspector.get_table_names(schema=schema):
-            return
+        table_names = set(inspector.get_table_names(schema=schema))
 
-        columns = {col["name"] for col in inspector.get_columns("invoices", schema=schema)}
-        table = _qualified_table("invoices")
-        if "percepciones" not in columns:
-            if "retenciones" in columns:
+        if "invoices" in table_names:
+            columns = {
+                col["name"] for col in inspector.get_columns("invoices", schema=schema)
+            }
+            table = _qualified_table("invoices")
+            if "percepciones" not in columns:
+                if "retenciones" in columns:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table} RENAME COLUMN retenciones TO percepciones"
+                        )
+                    )
+                else:
+                    if engine.dialect.name == "postgresql":
+                        conn.execute(
+                            text(
+                                f"ALTER TABLE {table} "
+                                "ADD COLUMN percepciones NUMERIC(12, 2) DEFAULT 0 NOT NULL"
+                            )
+                        )
+                    else:
+                        conn.execute(
+                            text(
+                                f"ALTER TABLE {table} "
+                                "ADD COLUMN percepciones NUMERIC(12, 2) DEFAULT 0"
+                            )
+                        )
+
                 conn.execute(
-                    text(f"ALTER TABLE {table} RENAME COLUMN retenciones TO percepciones")
+                    text(
+                        f"UPDATE {table} SET percepciones = 0 "
+                        "WHERE percepciones IS NULL"
+                    )
                 )
-            else:
+
+        if "retention_certificates" in table_names:
+            columns = {
+                col["name"]
+                for col in inspector.get_columns("retention_certificates", schema=schema)
+            }
+            table = _qualified_table("retention_certificates")
+            type_table = _qualified_table("retained_tax_types")
+            if "retained_tax_type_id" not in columns:
                 if engine.dialect.name == "postgresql":
                     conn.execute(
                         text(
                             f"ALTER TABLE {table} "
-                            "ADD COLUMN percepciones NUMERIC(12, 2) DEFAULT 0 NOT NULL"
+                            f"ADD COLUMN retained_tax_type_id INTEGER REFERENCES {type_table}(id)"
                         )
                     )
                 else:
                     conn.execute(
                         text(
-                            f"ALTER TABLE {table} "
-                            "ADD COLUMN percepciones NUMERIC(12, 2) DEFAULT 0"
+                            f"ALTER TABLE {table} ADD COLUMN retained_tax_type_id INTEGER"
                         )
                     )
 
-            conn.execute(
-                text(
-                    f"UPDATE {table} SET percepciones = 0 "
-                    "WHERE percepciones IS NULL"
-                )
-            )
+                default_name = "Sin especificar"
+                names: set[str] = set()
+                if "concept" in columns:
+                    results = conn.execute(
+                        text(f"SELECT DISTINCT concept FROM {table}")
+                    ).all()
+                    for (concept,) in results:
+                        cleaned = (concept or "").strip()
+                        if not cleaned:
+                            cleaned = default_name
+                        names.add(cleaned)
+
+                if not names:
+                    count = conn.execute(
+                        text(f"SELECT COUNT(*) FROM {table}")
+                    ).scalar_one()
+                    if count:
+                        names.add(default_name)
+
+                if names:
+                    existing_names = {
+                        row[0]
+                        for row in conn.execute(
+                            text(f"SELECT name FROM {type_table}")
+                        ).all()
+                    }
+                    missing = names - existing_names
+                    for name in sorted(missing):
+                        conn.execute(
+                            text(f"INSERT INTO {type_table} (name) VALUES (:name)"),
+                            {"name": name},
+                        )
+
+                    type_map = {
+                        row[1]: row[0]
+                        for row in conn.execute(
+                            text(f"SELECT id, name FROM {type_table}")
+                        ).all()
+                    }
+
+                    if "concept" in columns:
+                        rows = conn.execute(
+                            text(f"SELECT id, concept FROM {table}")
+                        ).all()
+                        for cert_id, concept in rows:
+                            cleaned = (concept or "").strip()
+                            if not cleaned:
+                                cleaned = default_name
+                            type_id = type_map.get(cleaned)
+                            if type_id is not None:
+                                conn.execute(
+                                    text(
+                                        f"UPDATE {table} "
+                                        "SET retained_tax_type_id = :type_id "
+                                        "WHERE id = :cert_id"
+                                    ),
+                                    {"type_id": type_id, "cert_id": cert_id},
+                                )
+                    else:
+                        default_id = type_map.get(default_name)
+                        if default_id is not None:
+                            conn.execute(
+                                text(
+                                    f"UPDATE {table} SET retained_tax_type_id = :type_id"
+                                ),
+                                {"type_id": default_id},
+                            )
+
+                null_count = conn.execute(
+                    text(
+                        f"SELECT COUNT(*) FROM {table} "
+                        "WHERE retained_tax_type_id IS NULL"
+                    )
+                ).scalar_one()
+                if null_count == 0 and engine.dialect.name == "postgresql":
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table} "
+                            "ALTER COLUMN retained_tax_type_id SET NOT NULL"
+                        )
+                    )
 
 def get_db():
     db = SessionLocal()

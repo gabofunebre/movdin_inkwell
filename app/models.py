@@ -81,6 +81,17 @@ class Invoice(Base):
     account = relationship("Account", back_populates="invoices")
 
 
+class RetainedTaxType(Base):
+    __tablename__ = "retained_tax_types"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    certificates = relationship("RetentionCertificate", back_populates="tax_type")
+
+
 class RetentionCertificate(Base):
     __tablename__ = "retention_certificates"
     __table_args__ = (
@@ -97,11 +108,16 @@ class RetentionCertificate(Base):
     number: Mapped[str] = mapped_column(String(50), nullable=False)
     date: Mapped[date] = mapped_column(Date, nullable=False)
     invoice_reference: Mapped[str] = mapped_column(String(50), nullable=False)
-    concept: Mapped[str] = mapped_column(Text, nullable=False)
+    retained_tax_type_id: Mapped[int] = mapped_column(
+        ForeignKey("retained_tax_types.id"),
+        nullable=False,
+    )
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+    tax_type = relationship("RetainedTaxType", back_populates="certificates")
 
 
 class FrequentTransaction(Base):

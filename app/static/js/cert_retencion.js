@@ -2,7 +2,8 @@ import {
   fetchRetentionCertificates,
   createRetentionCertificate,
   updateRetentionCertificate,
-  deleteRetentionCertificate
+  deleteRetentionCertificate,
+  fetchRetainedTaxTypes
 } from './api.js?v=1';
 import { formatCurrency, showOverlay, hideOverlay } from './ui.js?v=1';
 import { sanitizeDecimalInput, parseDecimal } from './money.js?v=1';
@@ -18,18 +19,29 @@ const form = document.getElementById('cert-form');
 const modalTitle = document.getElementById('cert-form-title');
 const alertBox = document.getElementById('cert-alert');
 const amountInput = form.amount;
+const taxTypeSelect = form.retained_tax_type_id;
 const isAdmin = Boolean(window.isAdmin);
 const columnCount = table.querySelectorAll('thead th').length;
 const currencyCode = window.certCurrency || 'ARS';
 const currencySymbol = CURRENCY_SYMBOLS[currencyCode] || '';
 
 let certificates = [];
+let retainedTaxTypes = [];
 let activeActionRow = null;
 let activeDataRow = null;
 
 function normalizeCertificate(cert) {
+  const taxType = cert.retained_tax_type || cert.tax_type || null;
+  const taxTypeId =
+    cert.retained_tax_type_id !== undefined
+      ? cert.retained_tax_type_id
+      : taxType?.id ?? null;
+  const normalizedId =
+    taxTypeId === null || taxTypeId === undefined ? null : Number(taxTypeId);
   return {
     ...cert,
+    retained_tax_type: taxType,
+    retained_tax_type_id: normalizedId,
     amount: Number(cert.amount)
   };
 }
@@ -55,6 +67,48 @@ function clearActionRow() {
   }
   activeActionRow = null;
   activeDataRow = null;
+}
+
+function populateTaxTypeSelect(selectedId = '', selectedType = null) {
+  taxTypeSelect.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Seleccione un impuesto retenido';
+  placeholder.disabled = true;
+  if (!selectedId) {
+    placeholder.selected = true;
+  }
+  taxTypeSelect.appendChild(placeholder);
+  const selectedValue = selectedId ? String(selectedId) : '';
+  retainedTaxTypes.forEach(type => {
+    const option = document.createElement('option');
+    option.value = String(type.id);
+    option.textContent = type.name;
+    if (selectedValue && String(type.id) === selectedValue) {
+      option.selected = true;
+    }
+    taxTypeSelect.appendChild(option);
+  });
+  if (selectedValue && !Array.from(taxTypeSelect.options).some(opt => opt.value === selectedValue)) {
+    if (selectedType) {
+      const opt = document.createElement('option');
+      opt.value = selectedValue;
+      opt.textContent = selectedType.name;
+      opt.selected = true;
+      taxTypeSelect.appendChild(opt);
+    }
+  }
+}
+
+function updateTaxTypeAvailability() {
+  if (!addBtn) return;
+  if (retainedTaxTypes.length === 0) {
+    addBtn.disabled = true;
+    addBtn.title = 'Configure tipos de impuestos retenidos antes de crear un certificado';
+  } else {
+    addBtn.disabled = false;
+    addBtn.removeAttribute('title');
+  }
 }
 
 function createActionButton({
@@ -125,11 +179,11 @@ function renderCertificates() {
   const filtered = certificates.filter(cert => {
     const number = cert.number?.toLowerCase() || '';
     const invoiceRef = cert.invoice_reference?.toLowerCase() || '';
-    const concept = cert.concept?.toLowerCase() || '';
+    const taxType = cert.retained_tax_type?.name?.toLowerCase() || '';
     return (
       number.includes(query) ||
       invoiceRef.includes(query) ||
-      concept.includes(query)
+      taxType.includes(query)
     );
   });
   filtered.sort((a, b) => {
@@ -156,15 +210,15 @@ function renderCertificates() {
     refTd.className = 'text-center';
     refTd.textContent = cert.invoice_reference;
 
-    const conceptTd = document.createElement('td');
-    conceptTd.textContent = cert.concept;
+    const taxTd = document.createElement('td');
+    taxTd.textContent = cert.retained_tax_type?.name || '';
 
     const amountTd = document.createElement('td');
     amountTd.className = 'text-end';
     const amountValue = Number.isFinite(cert.amount) ? cert.amount : 0;
     amountTd.textContent = `${currencySymbol} ${formatCurrency(Math.abs(amountValue))}`;
 
-    tr.append(numberTd, dateTd, refTd, conceptTd, amountTd);
+    tr.append(numberTd, dateTd, refTd, taxTd, amountTd);
     if (isAdmin) {
       tr.classList.add('cert-row-actionable');
       tr.addEventListener('click', () => toggleActionRow(tr, cert));
@@ -188,6 +242,7 @@ function openCreateModal() {
   setDateLimits();
   form.date.value = form.date.max;
   amountInput.value = '';
+  populateTaxTypeSelect();
   clearError();
   certModal.show();
 }
@@ -202,18 +257,26 @@ function openEditModal(cert) {
   form.date.value = cert.date;
   form.number.value = cert.number;
   form.invoice_reference.value = cert.invoice_reference;
-  form.concept.value = cert.concept;
+  populateTaxTypeSelect(
+    cert.retained_tax_type_id ? String(cert.retained_tax_type_id) : '',
+    cert.retained_tax_type || null
+  );
   amountInput.value = formatCurrency(Math.abs(Number(cert.amount)));
   clearError();
   certModal.show();
 }
 
-async function loadCertificates() {
+async function loadData() {
   showOverlay();
   try {
-    const data = await fetchRetentionCertificates(200, 0);
-    certificates = Array.isArray(data)
-      ? data.map(normalizeCertificate)
+    const [certData, taxData] = await Promise.all([
+      fetchRetentionCertificates(200, 0),
+      fetchRetainedTaxTypes()
+    ]);
+    retainedTaxTypes = Array.isArray(taxData) ? taxData : [];
+    updateTaxTypeAvailability();
+    certificates = Array.isArray(certData)
+      ? certData.map(normalizeCertificate)
       : [];
     renderCertificates();
   } finally {
@@ -240,8 +303,7 @@ form.addEventListener('submit', async event => {
   const payload = {
     date: form.date.value,
     number: form.number.value.trim(),
-    invoice_reference: form.invoice_reference.value.trim(),
-    concept: form.concept.value.trim()
+    invoice_reference: form.invoice_reference.value.trim()
   };
 
   const amountValue = parseDecimal(amountInput.value);
@@ -251,10 +313,18 @@ form.addEventListener('submit', async event => {
   }
   payload.amount = Math.abs(amountValue).toFixed(2);
 
-  if (!payload.number || !payload.invoice_reference || !payload.concept || !payload.date) {
+  const taxTypeId = Number(form.retained_tax_type_id.value);
+  if (!payload.number || !payload.invoice_reference || !payload.date) {
     showError('Todos los campos son obligatorios');
     return;
   }
+
+  if (!taxTypeId) {
+    showError('Seleccione un impuesto retenido');
+    return;
+  }
+
+  payload.retained_tax_type_id = taxTypeId;
 
   showOverlay();
   try {
@@ -319,4 +389,5 @@ if (isAdmin) {
   });
 }
 
-loadCertificates();
+updateTaxTypeAvailability();
+loadData();
