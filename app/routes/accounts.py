@@ -208,6 +208,11 @@ def account_balances(to_date: date | None = None, db: Session = Depends(get_db))
 @router.get("/{account_id}/balance", response_model=BalanceOut)
 def account_balance(account_id: int, to_date: date | None = None, db: Session = Depends(get_db)):
     to_date = to_date or date.max
+    acc = db.get(Account, account_id)
+    if not acc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Account not found"
+        )
     stmt = (
         select((Account.opening_balance + func.coalesce(func.sum(Transaction.amount), 0)).label("balance"))
         .select_from(Account)
@@ -222,8 +227,9 @@ def account_balance(account_id: int, to_date: date | None = None, db: Session = 
         .where(Account.id == bindparam("account_id"))
         .group_by(Account.id, Account.opening_balance)
     )
-    row = db.execute(stmt, {"account_id": account_id, "to_date": to_date}).one()
-    return BalanceOut(balance=row.balance)
+    row = db.execute(stmt, {"account_id": account_id, "to_date": to_date}).one_or_none()
+    balance = row.balance if row else acc.opening_balance
+    return BalanceOut(balance=balance)
 
 
 @router.get("/{account_id}/summary", response_model=AccountSummary)
