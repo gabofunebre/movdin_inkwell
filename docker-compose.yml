@@ -1,27 +1,27 @@
 services:
   db:
     image: postgres:17
-    container_name: IW_mov-din-db
+    container_name: db_iw-dev
     env_file:
       - .env
     volumes:
       - ${POSTGRES_DATA_PATH}:/var/lib/postgresql/data
     networks:
-      -  IW_internal
+      -  IW_dev
 
   app:
     build: .
-    container_name: IW_movdin-app
+    container_name: IW_dev-app
     env_file:
       - .env
     depends_on:
       - db
     restart: unless-stopped
     networks:
-      - IW_internal
+      - IW_dev
       - cloudflared_net
 
 networks:
-  IW_internal:
+  IW_dev:
   cloudflared_net:
     external: true
