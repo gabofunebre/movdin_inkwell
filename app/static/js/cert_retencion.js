@@ -2,7 +2,8 @@ import {
   fetchRetentionCertificates,
   createRetentionCertificate,
   updateRetentionCertificate,
-  deleteRetentionCertificate
+  deleteRetentionCertificate,
+  fetchRetainedTaxTypes
 } from './api.js?v=1';
 import { formatCurrency, showOverlay, hideOverlay } from './ui.js?v=1';
 import { sanitizeDecimalInput, parseDecimal } from './money.js?v=1';
@@ -25,6 +26,7 @@ const currencyCode = window.certCurrency || 'ARS';
 const currencySymbol = CURRENCY_SYMBOLS[currencyCode] || '';
 
 let certificates = [];
+let retainedTaxTypes = [];
 let activeActionRow = null;
 let activeDataRow = null;
 
@@ -58,6 +60,48 @@ function clearActionRow() {
   }
   activeActionRow = null;
   activeDataRow = null;
+}
+
+function populateTaxTypeSelect(selectedId = '', selectedType = null) {
+  taxTypeSelect.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Seleccione un impuesto retenido';
+  placeholder.disabled = true;
+  if (!selectedId) {
+    placeholder.selected = true;
+  }
+  taxTypeSelect.appendChild(placeholder);
+  const selectedValue = selectedId ? String(selectedId) : '';
+  retainedTaxTypes.forEach(type => {
+    const option = document.createElement('option');
+    option.value = String(type.id);
+    option.textContent = type.name;
+    if (selectedValue && String(type.id) === selectedValue) {
+      option.selected = true;
+    }
+    taxTypeSelect.appendChild(option);
+  });
+  if (selectedValue && !Array.from(taxTypeSelect.options).some(opt => opt.value === selectedValue)) {
+    if (selectedType) {
+      const opt = document.createElement('option');
+      opt.value = selectedValue;
+      opt.textContent = selectedType.name;
+      opt.selected = true;
+      taxTypeSelect.appendChild(opt);
+    }
+  }
+}
+
+function updateTaxTypeAvailability() {
+  if (!addBtn) return;
+  if (retainedTaxTypes.length === 0) {
+    addBtn.disabled = true;
+    addBtn.title = 'Configure tipos de impuestos retenidos antes de crear un certificado';
+  } else {
+    addBtn.disabled = false;
+    addBtn.removeAttribute('title');
+  }
 }
 
 function createActionButton({
@@ -216,12 +260,17 @@ function openEditModal(cert) {
   certModal.show();
 }
 
-async function loadCertificates() {
+async function loadData() {
   showOverlay();
   try {
-    const data = await fetchRetentionCertificates(200, 0);
-    certificates = Array.isArray(data)
-      ? data.map(normalizeCertificate)
+    const [certData, taxData] = await Promise.all([
+      fetchRetentionCertificates(200, 0),
+      fetchRetainedTaxTypes()
+    ]);
+    retainedTaxTypes = Array.isArray(taxData) ? taxData : [];
+    updateTaxTypeAvailability();
+    certificates = Array.isArray(certData)
+      ? certData.map(normalizeCertificate)
       : [];
     renderCertificates();
   } finally {
@@ -268,6 +317,13 @@ form.addEventListener('submit', async event => {
     showError('Todos los campos son obligatorios');
     return;
   }
+
+  if (!taxTypeId) {
+    showError('Seleccione un impuesto retenido');
+    return;
+  }
+
+  payload.retained_tax_type_id = taxTypeId;
 
   showOverlay();
   try {
@@ -332,4 +388,5 @@ if (isAdmin) {
   });
 }
 
-loadCertificates();
+updateTaxTypeAvailability();
+loadData();

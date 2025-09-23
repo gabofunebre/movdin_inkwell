@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, constr
 from config.constants import Currency, InvoiceType
 
 class AccountIn(BaseModel):
@@ -73,16 +73,32 @@ class InvoiceOut(BaseModel):
         from_attributes = True
 
 
+class RetainedTaxTypeBase(BaseModel):
+    name: constr(strip_whitespace=True, min_length=1, max_length=120)
+
+
+class RetainedTaxTypeCreate(RetainedTaxTypeBase):
+    pass
+
+
+class RetainedTaxTypeOut(RetainedTaxTypeBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
 class RetentionCertificateCreate(BaseModel):
     number: str
     date: date
     invoice_reference: str
-    concept: str
+    retained_tax_type_id: int
     amount: Decimal
 
 
 class RetentionCertificateOut(RetentionCertificateCreate):
     id: int
+    retained_tax_type: RetainedTaxTypeOut | None = None
 
     class Config:
         from_attributes = True
