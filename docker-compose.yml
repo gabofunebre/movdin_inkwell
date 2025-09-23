@@ -23,5 +23,7 @@ services:
 
 networks:
   IW_dev:
+    driver: bridge
+    name: IW_dev
   cloudflared_net:
     external: true
