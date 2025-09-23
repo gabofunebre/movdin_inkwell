@@ -4,8 +4,8 @@ import {
   updateRetentionCertificate,
   deleteRetentionCertificate,
   fetchRetainedTaxTypes
-} from './api.js?v=1';
-import { formatCurrency, showOverlay, hideOverlay } from './ui.js?v=1';
+} from './api.js?v=2';
+import { formatCurrency, showOverlay, hideOverlay } from './ui.js?v=2';
 import { sanitizeDecimalInput, parseDecimal } from './money.js?v=1';
 import { CURRENCY_SYMBOLS } from './constants.js';
 

@@ -1,5 +1,5 @@
-import { updateInvoice } from './api.js?v=1';
-import { showOverlay, hideOverlay } from './ui.js?v=1';
+import { updateInvoice } from './api.js?v=2';
+import { showOverlay, hideOverlay } from './ui.js?v=2';
 import { sanitizeDecimalInput, parseDecimal, formatCurrency } from './money.js?v=1';
 
 function formatTaxAmount(value) {

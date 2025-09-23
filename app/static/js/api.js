@@ -69,6 +69,30 @@ export async function deleteTransaction(id) {
   return { ok: false, error };
 }
 
+export async function syncBillingTransactions() {
+  let data = null;
+  try {
+    const res = await fetch('/transactions/billing/sync', { method: 'POST' });
+    try {
+      data = await res.json();
+    } catch (_) {}
+    if (res.ok) return { ok: true, data };
+    const errorDetail = data?.detail || data?.message;
+    return {
+      ok: false,
+      error:
+        errorDetail ||
+        'No se pudieron obtener los movimientos de la cuenta de facturación'
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        'No se pudieron obtener los movimientos de la cuenta de facturación'
+    };
+  }
+}
+
 export async function createInvoice(payload) {
   const res = await fetch('/invoices', {
     method: 'POST',
