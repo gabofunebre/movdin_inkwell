@@ -19,7 +19,7 @@ const form = document.getElementById('cert-form');
 const modalTitle = document.getElementById('cert-form-title');
 const alertBox = document.getElementById('cert-alert');
 const amountInput = form.amount;
-const taxTypeSelect = form.retained_tax_type_id;
+const withheldTaxInput = form.elements['withheld_tax'] || form.concept;
 const isAdmin = Boolean(window.isAdmin);
 const columnCount = table.querySelectorAll('thead th').length;
 const currencyCode = window.certCurrency || 'ARS';
@@ -31,18 +31,11 @@ let activeActionRow = null;
 let activeDataRow = null;
 
 function normalizeCertificate(cert) {
-  const taxType = cert.retained_tax_type || cert.tax_type || null;
-  const taxTypeId =
-    cert.retained_tax_type_id !== undefined
-      ? cert.retained_tax_type_id
-      : taxType?.id ?? null;
-  const normalizedId =
-    taxTypeId === null || taxTypeId === undefined ? null : Number(taxTypeId);
+  const withheldTax = cert.withheld_tax ?? cert.concept ?? '';
   return {
     ...cert,
-    retained_tax_type: taxType,
-    retained_tax_type_id: normalizedId,
-    amount: Number(cert.amount)
+    amount: Number(cert.amount),
+    withheld_tax: withheldTax
   };
 }
 
@@ -179,11 +172,11 @@ function renderCertificates() {
   const filtered = certificates.filter(cert => {
     const number = cert.number?.toLowerCase() || '';
     const invoiceRef = cert.invoice_reference?.toLowerCase() || '';
-    const taxType = cert.retained_tax_type?.name?.toLowerCase() || '';
+    const withheldTax = (cert.withheld_tax ?? cert.concept)?.toLowerCase() || '';
     return (
       number.includes(query) ||
       invoiceRef.includes(query) ||
-      taxType.includes(query)
+      withheldTax.includes(query)
     );
   });
   filtered.sort((a, b) => {
@@ -211,7 +204,7 @@ function renderCertificates() {
     refTd.textContent = cert.invoice_reference;
 
     const taxTd = document.createElement('td');
-    taxTd.textContent = cert.retained_tax_type?.name || '';
+    taxTd.textContent = cert.withheld_tax ?? cert.concept ?? '';
 
     const amountTd = document.createElement('td');
     amountTd.className = 'text-end';
@@ -242,7 +235,9 @@ function openCreateModal() {
   setDateLimits();
   form.date.value = form.date.max;
   amountInput.value = '';
-  populateTaxTypeSelect();
+  if (withheldTaxInput) {
+    withheldTaxInput.value = '';
+  }
   clearError();
   certModal.show();
 }
@@ -257,10 +252,9 @@ function openEditModal(cert) {
   form.date.value = cert.date;
   form.number.value = cert.number;
   form.invoice_reference.value = cert.invoice_reference;
-  populateTaxTypeSelect(
-    cert.retained_tax_type_id ? String(cert.retained_tax_type_id) : '',
-    cert.retained_tax_type || null
-  );
+  if (withheldTaxInput) {
+    withheldTaxInput.value = cert.withheld_tax ?? cert.concept ?? '';
+  }
   amountInput.value = formatCurrency(Math.abs(Number(cert.amount)));
   clearError();
   certModal.show();
@@ -303,7 +297,8 @@ form.addEventListener('submit', async event => {
   const payload = {
     date: form.date.value,
     number: form.number.value.trim(),
-    invoice_reference: form.invoice_reference.value.trim()
+    invoice_reference: form.invoice_reference.value.trim(),
+    concept: withheldTaxInput ? withheldTaxInput.value.trim() : ''
   };
 
   const amountValue = parseDecimal(amountInput.value);
@@ -313,8 +308,12 @@ form.addEventListener('submit', async event => {
   }
   payload.amount = Math.abs(amountValue).toFixed(2);
 
-  const taxTypeId = Number(form.retained_tax_type_id.value);
-  if (!payload.number || !payload.invoice_reference || !payload.date) {
+  if (
+    !payload.number ||
+    !payload.invoice_reference ||
+    !payload.concept ||
+    !payload.date
+  ) {
     showError('Todos los campos son obligatorios');
     return;
   }
