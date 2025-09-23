@@ -20,10 +20,13 @@ services:
     networks:
       - IW_dev
       - cloudflared_net
+      - TA-IW_NET
 
 networks:
   IW_dev:
     driver: bridge
     name: IW_dev
   cloudflared_net:
+    external: true
+  TA-IW_NET:
     external: true
