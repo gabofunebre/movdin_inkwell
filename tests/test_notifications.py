@@ -20,6 +20,7 @@ if str(APP_DIR) not in sys.path:
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 os.environ.setdefault("DB_SCHEMA", "")
 os.environ.setdefault("SECRETO_NOTIFICACIONES_IW_TA", "test-secret")
+os.environ.setdefault("NOTIFICACIONES_KEY_ALGORITHM", "HS256")
 os.environ.setdefault("NOTIF_SOURCE_APP", "app-a")
 os.environ.setdefault("PEER_BASE_URL", "https://peer.example.com")
 
@@ -36,6 +37,7 @@ from services.notifications import (  # noqa: E402
     compute_signature,
     require_shared_secret,
     send_notification,
+    verify_signature,
 )
 
 
@@ -65,6 +67,25 @@ def _prepare_signed_headers(
         "X-Source-App": "app-b",
         "X-Signature": signature,
     }, body_text
+
+
+def test_signature_algorithm_from_env(monkeypatch):
+    monkeypatch.setenv("NOTIFICACIONES_KEY_ALGORITHM", "HS512")
+    secret = "another-secret"
+    timestamp = "1700000000"
+    body = b"{}"
+
+    signature = compute_signature(secret, timestamp, body)
+
+    assert signature.startswith("sha512=")
+    assert verify_signature(secret, timestamp, body, signature)
+
+
+def test_signature_rejects_unknown_algorithm(monkeypatch):
+    monkeypatch.setenv("NOTIFICACIONES_KEY_ALGORITHM", "RS256")
+
+    with pytest.raises(RuntimeError):
+        compute_signature("secret", "1", b"{}")
 
 
 def _create_user(username: str, password: str) -> User:
