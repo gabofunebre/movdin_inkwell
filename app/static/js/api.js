@@ -8,6 +8,33 @@ export async function fetchTransactions(limit, offset) {
   return res.json();
 }
 
+export async function fetchNotifications(options = {}) {
+  const params = new URLSearchParams();
+  if (options.status) params.set('status', options.status);
+  if (options.since) params.set('since', options.since);
+  if (options.topic) params.set('topic', options.topic);
+  if (options.type) params.set('type', options.type);
+  if (typeof options.limit === 'number') params.set('limit', String(options.limit));
+  if (options.cursor) params.set('cursor', options.cursor);
+  if (options.include) {
+    const includeValue = Array.isArray(options.include)
+      ? options.include.join(',')
+      : String(options.include);
+    if (includeValue) params.set('include', includeValue);
+  }
+  const query = params.toString();
+  const res = await fetch(`/notificaciones${query ? `?${query}` : ''}`);
+  if (!res.ok) {
+    let error = 'No se pudieron obtener las notificaciones';
+    try {
+      const data = await res.json();
+      error = data?.detail || data?.message || error;
+    } catch (_) {}
+    throw new Error(error);
+  }
+  return res.json();
+}
+
 export async function fetchInvoices(limit, offset) {
   const res = await fetch(`/invoices?limit=${limit}&offset=${offset}`);
   return res.json();
@@ -67,6 +94,32 @@ export async function deleteTransaction(id) {
     error = data.detail || error;
   } catch (_) {}
   return { ok: false, error };
+}
+
+export async function acknowledgeNotification(id) {
+  try {
+    const res = await fetch('/notificaciones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'ack', id })
+    });
+    let data = null;
+    try {
+      data = await res.clone().json();
+    } catch (_) {}
+    if (res.ok) return { ok: true, data };
+    let error = 'No se pudo confirmar la notificación';
+    if (data) {
+      error = data.detail || data.message || error;
+    }
+    return { ok: false, error };
+  } catch (err) {
+    const message = err?.message && String(err.message).trim();
+    return {
+      ok: false,
+      error: message || 'No se pudo confirmar la notificación'
+    };
+  }
 }
 
 export async function syncBillingTransactions() {

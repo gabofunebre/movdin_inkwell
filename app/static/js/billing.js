@@ -1,4 +1,4 @@
-import { fetchAccounts, fetchInvoices, createInvoice } from './api.js?v=2';
+import { fetchAccounts, fetchInvoices, createInvoice } from './api.js?v=3';
 import { renderInvoice, showOverlay, hideOverlay } from './ui.js?v=2';
 import { sanitizeDecimalInput, parseDecimal, formatCurrency } from './money.js?v=1';
 

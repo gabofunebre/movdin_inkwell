@@ -61,25 +61,29 @@ def list_notifications(
 ) -> NotificationListResponse:
     _ensure_user(user)
 
-    query = select(Notification).order_by(
-        Notification.occurred_at.desc(), Notification.id.desc()
-    )
+    filters = []
 
     if status_filter == "unread":
-        query = query.where(Notification.status == NotificationStatus.UNREAD)
+        filters.append(Notification.status == NotificationStatus.UNREAD)
     elif status_filter == "read":
-        query = query.where(Notification.status == NotificationStatus.READ)
+        filters.append(Notification.status == NotificationStatus.READ)
     elif status_filter != "all":
         raise HTTPException(status_code=400, detail="Parámetro status inválido")
 
     if since is not None:
-        query = query.where(Notification.occurred_at >= _normalize_datetime(since))
+        filters.append(Notification.occurred_at >= _normalize_datetime(since))
 
     if topic:
-        query = query.where(Notification.topic == topic)
+        filters.append(Notification.topic == topic)
 
     if type_filter:
-        query = query.where(Notification.type == type_filter)
+        filters.append(Notification.type == type_filter)
+
+    query = (
+        select(Notification)
+        .where(*filters)
+        .order_by(Notification.occurred_at.desc(), Notification.id.desc())
+    )
 
     if cursor:
         try:
@@ -110,11 +114,8 @@ def list_notifications(
 
     unread_count: Optional[int] = None
     if "unread_count" in include_flags:
-        unread_count = (
-            db.execute(
-                select(func.count()).where(Notification.status == NotificationStatus.UNREAD)
-            ).scalar_one()
-        )
+        count_stmt = select(func.count()).select_from(Notification).where(*filters)
+        unread_count = db.execute(count_stmt).scalar_one()
 
     return NotificationListResponse(
         items=[NotificationOut.model_validate(item) for item in items],

@@ -11,7 +11,7 @@ import {
   createRetainedTaxType,
   updateRetainedTaxType,
   deleteRetainedTaxType
-} from './api.js?v=2';
+} from './api.js?v=3';
 import {
   renderAccount,
   renderFrequent,
