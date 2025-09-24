@@ -108,7 +108,9 @@ class RetainedTaxType(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    certificates = relationship("RetentionCertificate", back_populates="tax_type")
+    certificates = relationship(
+        "RetentionCertificate", back_populates="retained_tax_type"
+    )
 
 
 class RetentionCertificate(Base):
@@ -136,7 +138,9 @@ class RetentionCertificate(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    tax_type = relationship("RetainedTaxType", back_populates="certificates")
+    retained_tax_type = relationship(
+        "RetainedTaxType", back_populates="certificates"
+    )
 
 
 class FrequentTransaction(Base):
