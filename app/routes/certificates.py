@@ -41,7 +41,7 @@ def create_certificate(
     db.add(cert)
     db.commit()
     db.refresh(cert)
-    cert.tax_type = tax_type
+    cert.retained_tax_type = tax_type
     return cert
 
 
@@ -51,7 +51,7 @@ def list_certificates(
 ):
     stmt = (
         select(RetentionCertificate)
-        .options(selectinload(RetentionCertificate.tax_type))
+        .options(selectinload(RetentionCertificate.retained_tax_type))
         .order_by(RetentionCertificate.date.desc(), RetentionCertificate.id.desc())
         .limit(limit)
         .offset(offset)
@@ -92,7 +92,7 @@ def update_certificate(
     db.add(cert)
     db.commit()
     db.refresh(cert)
-    cert.tax_type = tax_type
+    cert.retained_tax_type = tax_type
     return cert
 
 
