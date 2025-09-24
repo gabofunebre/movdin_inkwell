@@ -30,7 +30,7 @@ INBOUND_RATE_LIMIT = 60
 INBOUND_RATE_WINDOW_SECONDS = 60
 RETENTION_DAYS = 90
 RETENTION_INTERVAL_SECONDS = 24 * 60 * 60
-ALLOWED_SOURCE_APPS = {"app-a", "app-b"}
+ALLOWED_SOURCE_APPS = {"app-a", "app-b", "movimientos-ta", "inkwell", "inkwell-ta"}
 
 
 def require_shared_secret() -> str:
@@ -41,9 +41,10 @@ def require_shared_secret() -> str:
 
 
 def _require_source_app() -> str:
-    source = os.getenv("NOTIF_SOURCE_APP", "app-a")
+    source = os.getenv("NOTIF_SOURCE_APP", "inkwell")
     if source not in ALLOWED_SOURCE_APPS:
-        raise RuntimeError("NOTIF_SOURCE_APP must be one of app-a|app-b")
+        allowed = "|".join(sorted(ALLOWED_SOURCE_APPS))
+        raise RuntimeError(f"NOTIF_SOURCE_APP must be one of {allowed}")
     return source
 
 

@@ -5,8 +5,10 @@ import {
   fetchFrequents,
   updateTransaction,
   deleteTransaction,
-  syncBillingTransactions
-} from './api.js?v=2';
+  syncBillingTransactions,
+  fetchNotifications,
+  acknowledgeNotification
+} from './api.js?v=3';
 import {
   renderTransaction,
   populateAccounts,
@@ -28,6 +30,31 @@ const freqSelect = document.getElementById('freq-select');
 const descInput = document.getElementById('desc-input');
 const amountInput = form.amount;
 const billingSyncButton = document.getElementById('billing-sync-button');
+const billingSyncLabel = document.getElementById('billing-sync-button-label');
+const billingNotificationBadge = document.getElementById('billing-notification-badge');
+
+const BILLING_NOTIFICATION_TYPE = 'movimiento_cta_facturacion_iw';
+const BILLING_NOTIFICATION_PAGE_LIMIT = 100;
+const BILLING_NOTIFICATION_MAX_PAGES = 20;
+const BILLING_NOTIFICATION_REFRESH_INTERVAL_MS = 60000;
+const BILLING_NOTIFICATION_BADGE_MAX = 99;
+
+let billingNotificationState = { ids: [], unreadCount: 0 };
+let billingNotificationTimer = null;
+
+let billingSyncOriginalLabel = '';
+if (billingSyncLabel) {
+  billingSyncOriginalLabel = billingSyncLabel.textContent.trim();
+} else if (billingSyncButton) {
+  billingSyncOriginalLabel = billingSyncButton.textContent.trim();
+}
+
+if (billingSyncButton) {
+  if (billingSyncOriginalLabel) {
+    billingSyncButton.setAttribute('aria-label', billingSyncOriginalLabel);
+  }
+  billingSyncButton.setAttribute('data-notification-count', '0');
+}
 
 let offset = 0;
 const limit = 50;
@@ -183,6 +210,175 @@ function applyFrequent(f) {
   descInput.value = f.description;
 }
 
+function updateBillingNotificationBadge(count) {
+  if (!billingNotificationBadge || !billingSyncButton) return;
+  const numericCount = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
+  const displayValue =
+    numericCount > BILLING_NOTIFICATION_BADGE_MAX
+      ? `${BILLING_NOTIFICATION_BADGE_MAX}+`
+      : String(numericCount);
+  billingSyncButton.setAttribute('data-notification-count', String(numericCount));
+  if (numericCount > 0) {
+    billingNotificationBadge.textContent = displayValue;
+    billingNotificationBadge.classList.remove('d-none');
+  } else {
+    billingNotificationBadge.textContent = '';
+    billingNotificationBadge.classList.add('d-none');
+  }
+  if (billingSyncOriginalLabel) {
+    const ariaLabel =
+      numericCount > 0
+        ? `${billingSyncOriginalLabel} (${numericCount} pendientes)`
+        : billingSyncOriginalLabel;
+    billingSyncButton.setAttribute('aria-label', ariaLabel);
+  }
+  if (numericCount > 0) {
+    billingSyncButton.title =
+      numericCount === 1
+        ? 'Hay 1 movimiento pendiente de sincronizar'
+        : `Hay ${numericCount} movimientos pendientes de sincronizar`;
+  } else {
+    billingSyncButton.removeAttribute('title');
+  }
+}
+
+function stopBillingNotificationRefreshTimer() {
+  if (billingNotificationTimer) {
+    clearTimeout(billingNotificationTimer);
+    billingNotificationTimer = null;
+  }
+}
+
+function scheduleBillingNotificationRefresh() {
+  if (!billingSyncButton || !billingNotificationBadge) return;
+  stopBillingNotificationRefreshTimer();
+  billingNotificationTimer = setTimeout(() => {
+    refreshBillingNotificationIndicator().catch(error => {
+      console.error('Error al actualizar las notificaciones de facturación', error);
+    });
+  }, BILLING_NOTIFICATION_REFRESH_INTERVAL_MS);
+}
+
+async function fetchBillingNotificationState() {
+  const ids = [];
+  let unreadCount = 0;
+  let cursor = null;
+  let first = true;
+  let iterations = 0;
+
+  while (true) {
+    const options = {
+      status: 'unread',
+      type: BILLING_NOTIFICATION_TYPE,
+      limit: BILLING_NOTIFICATION_PAGE_LIMIT
+    };
+    if (cursor) options.cursor = cursor;
+    if (first) options.include = 'unread_count';
+
+    const response = await fetchNotifications(options);
+
+    if (first) {
+      if (typeof response.unread_count === 'number' && Number.isFinite(response.unread_count)) {
+        unreadCount = Math.max(0, response.unread_count);
+      } else {
+        unreadCount = 0;
+      }
+      first = false;
+    }
+
+    if (Array.isArray(response.items)) {
+      response.items.forEach(item => {
+        if (item && item.id) {
+          ids.push(item.id);
+        }
+      });
+    }
+
+    const nextCursor = response.cursor || null;
+    iterations += 1;
+    if (!nextCursor || nextCursor === cursor || iterations >= BILLING_NOTIFICATION_MAX_PAGES) {
+      break;
+    }
+    cursor = nextCursor;
+  }
+
+  return { ids, unreadCount };
+}
+
+async function refreshBillingNotificationIndicator() {
+  if (!billingSyncButton || !billingNotificationBadge) return;
+  stopBillingNotificationRefreshTimer();
+  try {
+    const state = await fetchBillingNotificationState();
+    const count = Number.isFinite(state.unreadCount)
+      ? Math.max(0, state.unreadCount)
+      : state.ids.length;
+    billingNotificationState = {
+      ids: state.ids,
+      unreadCount: count
+    };
+    updateBillingNotificationBadge(count);
+  } catch (error) {
+    console.error('Error al obtener las notificaciones de facturación', error);
+  } finally {
+    scheduleBillingNotificationRefresh();
+  }
+}
+
+async function markBillingNotificationsAsRead() {
+  if (!billingSyncButton || !billingNotificationBadge) return;
+  stopBillingNotificationRefreshTimer();
+
+  if (!billingNotificationState.ids.length) {
+    try {
+      const state = await fetchBillingNotificationState();
+      const count = Number.isFinite(state.unreadCount)
+        ? Math.max(0, state.unreadCount)
+        : state.ids.length;
+      billingNotificationState = {
+        ids: state.ids,
+        unreadCount: count
+      };
+      updateBillingNotificationBadge(count);
+    } catch (error) {
+      console.error('Error al preparar las notificaciones de facturación para confirmar', error);
+      scheduleBillingNotificationRefresh();
+      return;
+    }
+  }
+
+  if (!billingNotificationState.ids.length) {
+    updateBillingNotificationBadge(0);
+    scheduleBillingNotificationRefresh();
+    return;
+  }
+
+  let hadError = false;
+  for (const id of billingNotificationState.ids) {
+    try {
+      const result = await acknowledgeNotification(id);
+      if (!result.ok) {
+        hadError = true;
+        if (result.error) {
+          console.error('No se pudo confirmar la notificación de facturación', result.error);
+        }
+      }
+    } catch (error) {
+      console.error('Error al confirmar una notificación de facturación', error);
+      hadError = true;
+    }
+  }
+
+  if (hadError) {
+    await refreshBillingNotificationIndicator();
+    return;
+  }
+
+  billingNotificationState = { ids: [], unreadCount: 0 };
+  updateBillingNotificationBadge(0);
+  scheduleBillingNotificationRefresh();
+}
+
 amountInput.addEventListener('input', () => {
   sanitizeDecimalInput(amountInput);
 });
@@ -278,36 +474,61 @@ form.addEventListener('submit', async e => {
   frequentMap = Object.fromEntries(frequents.map(f => [f.id, f]));
   await loadMore();
   updateSortIcons();
+  if (billingSyncButton && billingNotificationBadge) {
+    updateBillingNotificationBadge(billingNotificationState.unreadCount);
+    refreshBillingNotificationIndicator();
+  }
 })();
 
 if (billingSyncButton) {
-  const originalLabel = billingSyncButton.textContent;
   billingSyncButton.addEventListener('click', async () => {
     if (billingSyncButton.disabled) return;
+    stopBillingNotificationRefreshTimer();
     billingSyncButton.disabled = true;
-    const spinnerColor = billingSyncButton.style.color || '#0d6efd';
-    billingSyncButton.innerHTML =
-      `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="color:${spinnerColor}"></span>` +
-      'Sincronizando...';
+    const computedStyle = window.getComputedStyle(billingSyncButton);
+    const spinnerColor =
+      billingSyncButton.style.color || computedStyle.color || '#0d6efd';
+    if (billingSyncLabel) {
+      billingSyncLabel.innerHTML =
+        `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="color:${spinnerColor}"></span>` +
+        'Sincronizando...';
+    } else {
+      billingSyncButton.innerHTML =
+        `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="color:${spinnerColor}"></span>` +
+        'Sincronizando...';
+    }
     showOverlay();
     const result = await syncBillingTransactions();
     hideOverlay();
     billingSyncButton.disabled = false;
-    billingSyncButton.textContent = originalLabel;
+    if (billingSyncLabel) {
+      billingSyncLabel.textContent = billingSyncOriginalLabel || billingSyncLabel.textContent;
+    } else {
+      billingSyncButton.textContent = billingSyncOriginalLabel || billingSyncButton.textContent;
+      if (billingNotificationBadge && !billingSyncButton.contains(billingNotificationBadge)) {
+        billingSyncButton.appendChild(billingNotificationBadge);
+      }
+    }
+    updateBillingNotificationBadge(billingNotificationState.unreadCount);
     if (result.ok) {
       transactions = [];
       offset = 0;
       await loadMore();
+      await markBillingNotificationsAsRead();
+      scheduleBillingNotificationRefresh();
       if (result.data?.message) {
         showAlertModal(result.data.message, {
           title: 'Sincronización completada'
         });
       }
-    } else if (result.error) {
-      showAlertModal(result.error, {
-        title: 'Error',
-        confirmClass: 'btn-danger'
-      });
+    } else {
+      scheduleBillingNotificationRefresh();
+      if (result.error) {
+        showAlertModal(result.error, {
+          title: 'Error',
+          confirmClass: 'btn-danger'
+        });
+      }
     }
   });
 }

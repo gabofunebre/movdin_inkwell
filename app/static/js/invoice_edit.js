@@ -1,4 +1,4 @@
-import { updateInvoice } from './api.js?v=2';
+import { updateInvoice } from './api.js?v=3';
 import { showOverlay, hideOverlay } from './ui.js?v=2';
 import { sanitizeDecimalInput, parseDecimal, formatCurrency } from './money.js?v=1';
 

@@ -272,6 +272,65 @@ def test_list_notifications_supports_filters_and_pagination(client):
     assert all(item["topic"] == "ventas" for item in next_data["items"])
 
 
+def test_list_notifications_filtered_unread_count(client):
+    now = datetime.now(timezone.utc)
+    notifications = [
+        Notification(
+            type="movimiento_cta_facturacion_iw",
+            title="Inkwell 1",
+            body="Body",
+            occurred_at=now,
+            topic="inkwell",
+            idempotency_key=str(uuid.uuid4()),
+            source_app="app-b",
+        ),
+        Notification(
+            type="movimiento_cta_facturacion_iw",
+            title="Inkwell leído",
+            body="Body",
+            occurred_at=now - timedelta(minutes=1),
+            topic="inkwell",
+            status=NotificationStatus.READ,
+            read_at=now - timedelta(seconds=30),
+            idempotency_key=str(uuid.uuid4()),
+            source_app="app-b",
+        ),
+        Notification(
+            type="ventas.presupuesto_creado.v1",
+            title="Otra",
+            body="Body",
+            occurred_at=now - timedelta(minutes=2),
+            topic="ventas",
+            idempotency_key=str(uuid.uuid4()),
+            source_app="app-b",
+        ),
+    ]
+    with SessionLocal() as session:
+        session.execute(delete(Notification))
+        for item in notifications:
+            session.add(item)
+        session.commit()
+
+    username = "inkwell-user"
+    password = "secret"
+    _create_user(username, password)
+    login = client.post(
+        "/login",
+        data={"username": username, "password": password},
+        follow_redirects=False,
+    )
+    assert login.status_code == 302
+
+    response = client.get(
+        "/notificaciones",
+        params={"type": "movimiento_cta_facturacion_iw", "include": "unread_count"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["unread_count"] == 1
+    assert all(item["type"] == "movimiento_cta_facturacion_iw" for item in data["items"])
+
+
 def test_send_notification_builds_signed_request():
     captured: dict[str, object] = {}
 
