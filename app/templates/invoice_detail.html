@@ -39,7 +39,7 @@
   <button id="edit-btn" class="btn btn-primary me-2">
     <i class="bi bi-pencil"></i> Editar
   </button>
-  <form action="/invoice/{{ invoice.id }}/delete" method="post" class="d-inline" onsubmit="return confirm('¿Eliminar factura?');">
+  <form action="/invoice/{{ invoice.id }}/delete" method="post" class="d-inline" data-confirm="¿Eliminar factura?" data-confirm-confirm-text="Eliminar">
     <button class="btn btn-danger"><i class="bi bi-trash"></i> Eliminar</button>
   </form>
 </div>

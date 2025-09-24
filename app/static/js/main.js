@@ -127,7 +127,10 @@ function openEditModal(tx) {
 }
 
 async function confirmDelete(tx) {
-  if (!confirm('¿Eliminar movimiento?')) return;
+  const confirmed = await showConfirmModal('¿Eliminar movimiento?', {
+    confirmText: 'Eliminar'
+  });
+  if (!confirmed) return;
   showOverlay();
   const result = await deleteTransaction(tx.id);
   hideOverlay();
@@ -136,7 +139,10 @@ async function confirmDelete(tx) {
     offset = 0;
     await loadMore();
   } else {
-    alert(result.error || 'Error al eliminar');
+    showAlertModal(result.error || 'Error al eliminar', {
+      title: 'Error',
+      confirmClass: 'btn-danger'
+    });
   }
 }
 
@@ -293,10 +299,15 @@ if (billingSyncButton) {
       offset = 0;
       await loadMore();
       if (result.data?.message) {
-        alert(result.data.message);
+        showAlertModal(result.data.message, {
+          title: 'Sincronización completada'
+        });
       }
     } else if (result.error) {
-      alert(result.error);
+      showAlertModal(result.error, {
+        title: 'Error',
+        confirmClass: 'btn-danger'
+      });
     }
   });
 }

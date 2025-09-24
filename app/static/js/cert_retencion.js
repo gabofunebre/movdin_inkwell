@@ -370,12 +370,18 @@ form.addEventListener('submit', async event => {
 });
 
 async function confirmDelete(cert) {
-  if (!confirm('¿Eliminar certificado?')) return;
+  const confirmed = await showConfirmModal('¿Eliminar certificado?', {
+    confirmText: 'Eliminar'
+  });
+  if (!confirmed) return;
   showOverlay();
   try {
     const result = await deleteRetentionCertificate(cert.id);
     if (!result.ok) {
-      alert(result.error || 'Error al eliminar');
+      showAlertModal(result.error || 'Error al eliminar', {
+        title: 'Error',
+        confirmClass: 'btn-danger'
+      });
       return;
     }
     certificates = certificates.filter(item => item.id !== cert.id);

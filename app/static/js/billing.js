@@ -302,7 +302,9 @@ async function loadMore() {
 
 function openModal(type) {
   if (!billingAccount) {
-    alert('Se requiere una cuenta de facturación');
+    showAlertModal('Se requiere una cuenta de facturación', {
+      title: 'Atención'
+    });
     return;
   }
   form.reset();
