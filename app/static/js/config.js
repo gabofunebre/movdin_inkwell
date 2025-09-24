@@ -131,7 +131,10 @@ form.addEventListener('submit', async e => {
   if (payload.is_billing) {
     const existing = accounts.find(a => a.is_billing && a.id !== parseInt(idField.value || '0', 10));
     if (existing) {
-      const ok = confirm(`La cuenta "${existing.name}" ya es de facturación. ¿Reemplazarla?`);
+      const ok = await showConfirmModal(`La cuenta "${existing.name}" ya es de facturación. ¿Reemplazarla?`, {
+        confirmText: 'Reemplazar',
+        confirmClass: 'btn-warning'
+      });
       if (!ok) return;
       replaceBilling = true;
     }
@@ -200,7 +203,10 @@ confirmBtn.addEventListener('click', async () => {
     tbody.innerHTML = '';
     await loadAccounts();
   } else {
-    alert(result.error || 'Error al eliminar');
+    showAlertModal(result.error || 'Error al eliminar', {
+      title: 'Error',
+      confirmClass: 'btn-danger'
+    });
   }
   accountToDelete = null;
 });
@@ -273,7 +279,10 @@ freqConfirmBtn.addEventListener('click', async () => {
     freqTbody.innerHTML = '';
     await loadFrequents();
   } else {
-    alert(result.error || 'Error al eliminar');
+    showAlertModal(result.error || 'Error al eliminar', {
+      title: 'Error',
+      confirmClass: 'btn-danger'
+    });
   }
   freqToDelete = null;
 });
@@ -343,7 +352,10 @@ taxConfirmBtn.addEventListener('click', async () => {
     taxTbody.innerHTML = '';
     await loadRetainedTaxTypes();
   } else {
-    alert(result.error || 'Error al eliminar');
+    showAlertModal(result.error || 'Error al eliminar', {
+      title: 'Error',
+      confirmClass: 'btn-danger'
+    });
   }
   taxToDelete = null;
 });

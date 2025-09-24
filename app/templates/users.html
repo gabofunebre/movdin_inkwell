@@ -20,7 +20,7 @@
           <form method='post' action='/users/{{ u.id }}/approve' class='d-inline'>
             <button class='btn btn-sm btn-success' title='Aprobar'><i class='bi bi-check'></i></button>
           </form>
-          <form method='post' action='/users/{{ u.id }}/delete' class='d-inline' onsubmit='return confirm("¿Eliminar usuario?");'>
+          <form method='post' action='/users/{{ u.id }}/delete' class='d-inline' data-confirm='¿Eliminar usuario?' data-confirm-confirm-text='Eliminar'>
             <button class='btn btn-sm btn-danger' title='Eliminar'><i class='bi bi-trash'></i></button>
           </form>
         </td>
@@ -52,7 +52,7 @@
           </form>
           {% endif %}
           {% if user.is_admin or u.id == user.id %}
-          <form method='post' action='/users/{{ u.id }}/delete' class='d-inline' onsubmit='return confirm("¿Eliminar usuario?");'>
+          <form method='post' action='/users/{{ u.id }}/delete' class='d-inline' data-confirm='¿Eliminar usuario?' data-confirm-confirm-text='Eliminar'>
             <button class='btn btn-sm btn-danger' title='Eliminar'><i class='bi bi-trash'></i></button>
           </form>
           {% endif %}
