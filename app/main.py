@@ -36,11 +36,7 @@ app = FastAPI(title="Movimientos")
 @app.middleware("http")
 async def require_login_middleware(request: Request, call_next):
     path = request.url.path
-    if (
-        path == "/notificaciones"
-        and request.method.upper() == "POST"
-        and request.headers.get("X-Signature")
-    ):
+    if path.startswith("/notificaciones"):
         return await call_next(request)
     allowed = {"/login", "/register", "/health", "/facturacion-info"}
     if not request.session.get("user_id") and not path.startswith("/static") and path not in allowed:
