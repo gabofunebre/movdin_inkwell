@@ -12,6 +12,7 @@ import os
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -24,7 +25,6 @@ from models import Notification, NotificationStatus
 
 LOGGER = logging.getLogger(__name__)
 
-SIGNATURE_PREFIX = "sha256="
 TIMESTAMP_WINDOW_SECONDS = 300
 INBOUND_RATE_LIMIT = 60
 INBOUND_RATE_WINDOW_SECONDS = 60
@@ -34,6 +34,14 @@ ALLOWED_SOURCE_APPS = {"app-a", "app-b", "movimientos-ta", "inkwell", "inkwell-t
 
 
 NOTIFICATIONS_SECRET_ENV = "SECRETO_NOTIFICACIONES_IW_TA"
+NOTIFICATIONS_ALGORITHM_ENV = "NOTIFICACIONES_KEY_ALGORITHM"
+DEFAULT_KEY_ALGORITHM = "HS256"
+
+ALLOWED_KEY_ALGORITHMS: dict[str, tuple[str, Callable[..., Any]]] = {
+    "HS256": ("sha256", hashlib.sha256),
+    "HS384": ("sha384", hashlib.sha384),
+    "HS512": ("sha512", hashlib.sha512),
+}
 
 
 def require_shared_secret() -> str:
@@ -41,6 +49,17 @@ def require_shared_secret() -> str:
     if not secret:
         raise RuntimeError(f"{NOTIFICATIONS_SECRET_ENV} is not configured")
     return secret
+
+
+def require_key_algorithm() -> tuple[str, Callable[..., Any]]:
+    algorithm = os.getenv(NOTIFICATIONS_ALGORITHM_ENV, DEFAULT_KEY_ALGORITHM)
+    algorithm_key = algorithm.upper()
+    if algorithm_key not in ALLOWED_KEY_ALGORITHMS:
+        allowed = ", ".join(sorted(ALLOWED_KEY_ALGORITHMS))
+        raise RuntimeError(
+            f"{NOTIFICATIONS_ALGORITHM_ENV} must be one of {allowed}; got {algorithm}"
+        )
+    return ALLOWED_KEY_ALGORITHMS[algorithm_key]
 
 
 def _require_source_app() -> str:
@@ -53,8 +72,9 @@ def _require_source_app() -> str:
 
 def compute_signature(secret: str, timestamp: str, body: bytes) -> str:
     message = timestamp.encode("utf-8") + b"." + body
-    digest = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
-    return f"{SIGNATURE_PREFIX}{digest}"
+    prefix, digestmod = require_key_algorithm()
+    digest = hmac.new(secret.encode("utf-8"), message, digestmod).hexdigest()
+    return f"{prefix}={digest}"
 
 
 def verify_signature(secret: str, timestamp: str, body: bytes, provided: str) -> bool:
