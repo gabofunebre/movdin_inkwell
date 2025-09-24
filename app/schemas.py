@@ -1,8 +1,12 @@
-from datetime import date
+from datetime import date, datetime
+from uuid import UUID
 from decimal import Decimal
+
+from typing import Any, List, Literal
 
 from pydantic import BaseModel, constr
 from config.constants import Currency, InvoiceType
+from models import NotificationPriority, NotificationStatus
 
 class AccountIn(BaseModel):
     name: str
@@ -153,3 +157,41 @@ class UserOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class NotificationPayload(BaseModel):
+    type: str
+    occurred_at: datetime
+    title: str
+    body: str
+    deeplink: str | None = None
+    topic: str | None = None
+    priority: NotificationPriority = NotificationPriority.NORMAL
+    variables: dict[str, Any] | None = None
+
+
+class NotificationOut(BaseModel):
+    id: UUID
+    type: str
+    title: str
+    body: str
+    deeplink: str | None = None
+    topic: str | None = None
+    priority: NotificationPriority
+    status: NotificationStatus
+    occurred_at: datetime
+    variables: dict[str, Any] | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class NotificationListResponse(BaseModel):
+    items: List[NotificationOut]
+    cursor: str | None = None
+    unread_count: int | None = None
+
+
+class NotificationAck(BaseModel):
+    action: Literal["ack"]
+    id: str
