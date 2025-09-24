@@ -1,5 +1,6 @@
 from sqlalchemy import MetaData, create_engine, text, inspect
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 import os
 
@@ -8,9 +9,16 @@ DB_DSN = os.getenv("DATABASE_URL") or os.getenv("DB_DSN")
 if not DB_DSN:
     raise RuntimeError("DATABASE_URL not set")
 
-SCHEMA_NAME = os.getenv("DB_SCHEMA", "movdin")
+_raw_schema = os.getenv("DB_SCHEMA", "movdin")
+SCHEMA_NAME = _raw_schema or None
 
-engine = create_engine(DB_DSN, future=True, pool_pre_ping=True)
+engine_kwargs: dict[str, object] = {"future": True, "pool_pre_ping": True}
+if DB_DSN.startswith("sqlite"):
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+    if ":memory:" in DB_DSN:
+        engine_kwargs["poolclass"] = StaticPool
+
+engine = create_engine(DB_DSN, **engine_kwargs)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 
@@ -23,7 +31,7 @@ def init_db() -> None:
     import models  # register models
 
     with engine.begin() as conn:
-        if engine.dialect.name == "postgresql":
+        if engine.dialect.name == "postgresql" and SCHEMA_NAME:
             conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{_quote_identifier(SCHEMA_NAME)}"'))
 
     Base.metadata.create_all(bind=engine)
@@ -39,7 +47,7 @@ def _quote_identifier(identifier: str) -> str:
 def _qualified_table(name: str) -> str:
     """Return a table reference qualified with the configured schema when needed."""
 
-    if engine.dialect.name == "postgresql":
+    if engine.dialect.name == "postgresql" and SCHEMA_NAME:
         return f'"{_quote_identifier(SCHEMA_NAME)}"."{_quote_identifier(name)}"'
     return name
 
