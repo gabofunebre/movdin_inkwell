@@ -104,8 +104,11 @@ async def send_notification(
     base_url = os.getenv("PEER_BASE_URL")
     if not base_url:
         raise RuntimeError("PEER_BASE_URL is not configured")
-    if not base_url.lower().startswith("https://"):
-        raise RuntimeError("PEER_BASE_URL must use HTTPS")
+    normalized_base = base_url.lower()
+    if not normalized_base.startswith(("http://", "https://")):
+        raise RuntimeError("PEER_BASE_URL must use HTTP or HTTPS")
+    if normalized_base.startswith("http://"):
+        LOGGER.warning("PEER_BASE_URL is using HTTP; consider enabling HTTPS in production")
 
     payload = dict(payload)
     occurred_at = payload.get("occurred_at")
