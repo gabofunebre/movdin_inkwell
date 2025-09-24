@@ -33,10 +33,13 @@ RETENTION_INTERVAL_SECONDS = 24 * 60 * 60
 ALLOWED_SOURCE_APPS = {"app-a", "app-b", "movimientos-ta", "inkwell", "inkwell-ta"}
 
 
+NOTIFICATIONS_SECRET_ENV = "SECRETO_NOTIFICACIONES_IW_TA"
+
+
 def require_shared_secret() -> str:
-    secret = os.getenv("NOTIF_SHARED_SECRET")
+    secret = os.getenv(NOTIFICATIONS_SECRET_ENV)
     if not secret:
-        raise RuntimeError("NOTIF_SHARED_SECRET is not configured")
+        raise RuntimeError(f"{NOTIFICATIONS_SECRET_ENV} is not configured")
     return secret
 
 

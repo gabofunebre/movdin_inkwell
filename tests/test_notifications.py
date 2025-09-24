@@ -19,7 +19,7 @@ if str(APP_DIR) not in sys.path:
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 os.environ.setdefault("DB_SCHEMA", "")
-os.environ.setdefault("NOTIF_SHARED_SECRET", "test-secret")
+os.environ.setdefault("SECRETO_NOTIFICACIONES_IW_TA", "test-secret")
 os.environ.setdefault("NOTIF_SOURCE_APP", "app-a")
 os.environ.setdefault("PEER_BASE_URL", "https://peer.example.com")
 
