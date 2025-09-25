@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from config.db import get_db
 from config.constants import InvoiceType
-from models import Account, Transaction, Invoice
+from models import Account, Transaction, Invoice, RetentionCertificate, RetainedTaxType
 from schemas import (
     AccountBalance,
     AccountIn,
@@ -16,9 +16,118 @@ from schemas import (
     BalanceOut,
     TransactionWithBalance,
     AccountSummary,
+    RetentionBreakdown,
 )
 
 router = APIRouter(prefix="/accounts")
+
+
+def _normalize_tax_name(name: str) -> str:
+    return "".join(ch for ch in name.casefold() if ch.isalnum())
+
+
+def get_account_summary_data(db: Session, account_id: int) -> AccountSummary:
+    acc = db.get(Account, account_id)
+    if not acc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Account not found"
+        )
+    stmt = (
+        select(
+            Account.opening_balance,
+            Account.is_billing,
+            func.coalesce(
+                func.sum(case((Transaction.amount > 0, Transaction.amount), else_=0)),
+                0,
+            ).label("income"),
+            func.coalesce(
+                func.sum(case((Transaction.amount < 0, -Transaction.amount), else_=0)),
+                0,
+            ).label("expense"),
+        )
+        .outerjoin(Transaction)
+        .where(Account.id == account_id)
+        .group_by(Account.id)
+    )
+    row = db.execute(stmt).one()
+    iva_pur = iva_sale = iibb = percepciones = Decimal("0")
+    iva_withholdings = iibb_withholdings = retentions_total = Decimal("0")
+    other_withholdings: list[RetentionBreakdown] = []
+    if row.is_billing:
+        tax_stmt = (
+            select(
+                func.coalesce(
+                    func.sum(
+                        case((Invoice.type == InvoiceType.PURCHASE, Invoice.iva_amount), else_=0)
+                    ),
+                    0,
+                ).label("iva_pur"),
+                func.coalesce(
+                    func.sum(
+                        case((Invoice.type == InvoiceType.SALE, Invoice.iva_amount), else_=0)
+                    ),
+                    0,
+                ).label("iva_sale"),
+                func.coalesce(
+                    func.sum(
+                        case((Invoice.type == InvoiceType.SALE, Invoice.iibb_amount), else_=0)
+                    ),
+                    0,
+                ).label("iibb"),
+                func.coalesce(
+                    func.sum(
+                        case((Invoice.type == InvoiceType.PURCHASE, Invoice.percepciones), else_=0)
+                    ),
+                    0,
+                ).label("percepciones"),
+            )
+            .where(Invoice.account_id == account_id)
+        )
+        tax_row = db.execute(tax_stmt).one()
+        iva_pur = tax_row.iva_pur
+        iva_sale = tax_row.iva_sale
+        iibb = tax_row.iibb
+        percepciones = tax_row.percepciones
+
+        retention_stmt = (
+            select(
+                RetainedTaxType.name,
+                func.coalesce(func.sum(RetentionCertificate.amount), 0).label("total"),
+            )
+            .join(
+                RetentionCertificate,
+                RetainedTaxType.id == RetentionCertificate.retained_tax_type_id,
+            )
+            .group_by(RetainedTaxType.id)
+        )
+        for ret_row in db.execute(retention_stmt):
+            amount = ret_row.total or Decimal("0")
+            retentions_total += amount
+            normalized = _normalize_tax_name(ret_row.name)
+            if normalized == "iva":
+                iva_withholdings = amount
+            elif normalized == "iibb":
+                iibb_withholdings = amount
+            else:
+                other_withholdings.append(
+                    RetentionBreakdown(name=ret_row.name, amount=amount)
+                )
+        other_withholdings.sort(key=lambda item: item.name.casefold())
+
+    return AccountSummary(
+        opening_balance=row.opening_balance,
+        income_balance=row.income,
+        expense_balance=row.expense,
+        is_billing=row.is_billing,
+        iva_purchases=iva_pur if row.is_billing else None,
+        iva_sales=iva_sale if row.is_billing else None,
+        iibb=iibb if row.is_billing else None,
+        percepciones=percepciones if row.is_billing else None,
+        iva_withholdings=iva_withholdings if row.is_billing else None,
+        iibb_withholdings=iibb_withholdings if row.is_billing else None,
+        retentions_total=retentions_total if row.is_billing else None,
+        other_withholdings=other_withholdings if row.is_billing else None,
+    )
 
 
 @router.post("", response_model=AccountOut)
@@ -180,6 +289,12 @@ def account_balances(to_date: date | None = None, db: Session = Depends(get_db))
     tax_rows = db.execute(tax_stmt, {"to_date": to_date}).all()
     tax_map = {r.account_id: r for r in tax_rows}
 
+    retentions_total = db.scalar(
+        select(func.coalesce(func.sum(RetentionCertificate.amount), 0))
+    )
+    if retentions_total is None:
+        retentions_total = Decimal("0")
+
     balances = []
     for r in rows:
         balance = r.balance
@@ -193,6 +308,7 @@ def account_balances(to_date: date | None = None, db: Session = Depends(get_db))
                     + taxes.iva_pur
                     + taxes.percepciones
                 )
+            balance += retentions_total
         balances.append(
             AccountBalance(
                 account_id=r.id,
@@ -234,75 +350,7 @@ def account_balance(account_id: int, to_date: date | None = None, db: Session = 
 
 @router.get("/{account_id}/summary", response_model=AccountSummary)
 def account_summary(account_id: int, db: Session = Depends(get_db)):
-    acc = db.get(Account, account_id)
-    if not acc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Account not found"
-        )
-    stmt = (
-        select(
-            Account.opening_balance,
-            Account.is_billing,
-            func.coalesce(
-                func.sum(case((Transaction.amount > 0, Transaction.amount), else_=0)),
-                0,
-            ).label("income"),
-            func.coalesce(
-                func.sum(case((Transaction.amount < 0, -Transaction.amount), else_=0)),
-                0,
-            ).label("expense"),
-        )
-        .outerjoin(Transaction)
-        .where(Account.id == account_id)
-        .group_by(Account.id)
-    )
-    row = db.execute(stmt).one()
-    iva_pur = iva_sale = iibb = percepciones = Decimal("0")
-    if row.is_billing:
-        tax_stmt = (
-            select(
-                func.coalesce(
-                    func.sum(
-                        case((Invoice.type == InvoiceType.PURCHASE, Invoice.iva_amount), else_=0)
-                    ),
-                    0,
-                ).label("iva_pur"),
-                func.coalesce(
-                    func.sum(
-                        case((Invoice.type == InvoiceType.SALE, Invoice.iva_amount), else_=0)
-                    ),
-                    0,
-                ).label("iva_sale"),
-                func.coalesce(
-                    func.sum(
-                        case((Invoice.type == InvoiceType.SALE, Invoice.iibb_amount), else_=0)
-                    ),
-                    0,
-                ).label("iibb"),
-                func.coalesce(
-                    func.sum(
-                        case((Invoice.type == InvoiceType.PURCHASE, Invoice.percepciones), else_=0)
-                    ),
-                    0,
-                ).label("percepciones"),
-            )
-            .where(Invoice.account_id == account_id)
-        )
-        tax_row = db.execute(tax_stmt).one()
-        iva_pur = tax_row.iva_pur
-        iva_sale = tax_row.iva_sale
-        iibb = tax_row.iibb
-        percepciones = tax_row.percepciones
-    return AccountSummary(
-        opening_balance=row.opening_balance,
-        income_balance=row.income,
-        expense_balance=row.expense,
-        is_billing=row.is_billing,
-        iva_purchases=iva_pur if row.is_billing else None,
-        iva_sales=iva_sale if row.is_billing else None,
-        iibb=iibb if row.is_billing else None,
-        percepciones=percepciones if row.is_billing else None,
-    )
+    return get_account_summary_data(db, account_id)
 
 
 @router.get("/{account_id}/transactions", response_model=List[TransactionWithBalance])
