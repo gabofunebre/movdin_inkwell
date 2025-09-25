@@ -161,13 +161,6 @@ async def billing(request: Request, db: Session = Depends(get_db), user=Depends(
         title = "Facturación"
         header_title = "Facturación"
         billing_currency = None
-    more_documents = [
-        {
-            "label": "Certificado de Retención",
-            "url": "/certificados-retencion.html",
-            "active": False,
-        }
-    ]
     return templates.TemplateResponse(
         "billing.html",
         {
@@ -175,7 +168,6 @@ async def billing(request: Request, db: Session = Depends(get_db), user=Depends(
             "title": title,
             "header_title": header_title,
             "user": user,
-            "more_documents": more_documents,
             "billing_account": acc,
             "billing_currency": billing_currency,
         },
@@ -198,13 +190,6 @@ async def retention_certificates(
         title = "Certificados de Retención"
         header_title = "Certificados de Retención"
         billing_currency = None
-    more_documents = [
-        {
-            "label": "Certificado de Retención",
-            "url": "/certificados-retencion.html",
-            "active": True,
-        }
-    ]
     return templates.TemplateResponse(
         "cert_retencion.html",
         {
@@ -212,7 +197,6 @@ async def retention_certificates(
             "title": title,
             "header_title": header_title,
             "user": user,
-            "more_documents": more_documents,
             "billing_account": acc,
             "billing_currency": billing_currency,
         },
