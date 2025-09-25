@@ -26,6 +26,7 @@ from services.notifications import (
     start_notification_retention_job,
     stop_notification_retention_job,
 )
+from services.retained_taxes import ensure_default_retained_tax_types
 
 load_dotenv()
 
@@ -63,6 +64,8 @@ templates.env.filters["money"] = format_money
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
+    with SessionLocal() as db:
+        ensure_default_retained_tax_types(db)
     admin_user = os.getenv("ADMIN_USERNAME")
     admin_pass = os.getenv("ADMIN_PASSWORD")
     admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")

@@ -70,6 +70,7 @@ const taxConfirmMessage = taxConfirmEl.querySelector('#confirm-tax-message');
 const taxConfirmBtn = taxConfirmEl.querySelector('#confirm-tax-yes');
 let taxToDelete = null;
 let retainedTaxTypes = [];
+const PROTECTED_TAX_NAMES = new Set(['IVA', 'IIBB', 'Ganancias']);
 
 function populateCurrencies() {
   currencySelect.innerHTML = '';
@@ -323,7 +324,14 @@ async function loadRetainedTaxTypes() {
   retainedTaxTypes = await fetchRetainedTaxTypes();
   taxTbody.innerHTML = '';
   retainedTaxTypes.forEach(tax => {
-    renderRetainedTaxType(taxTbody, tax, startEditTax, removeTaxType);
+    const isProtected = PROTECTED_TAX_NAMES.has(tax.name);
+    renderRetainedTaxType(
+      taxTbody,
+      tax,
+      isProtected ? null : startEditTax,
+      isProtected ? null : removeTaxType,
+      { protected: isProtected }
+    );
   });
 }
 
