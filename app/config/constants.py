@@ -16,3 +16,6 @@ CURRENCY_SYMBOLS = {
     Currency.USD: "u$s",
 }
 
+
+DEFAULT_RETAINED_TAX_TYPES: tuple[str, ...] = ("IVA", "IIBB", "Ganancias")
+
