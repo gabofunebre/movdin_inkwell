@@ -108,6 +108,11 @@ class RetentionCertificateOut(RetentionCertificateCreate):
         from_attributes = True
 
 
+class RetentionBreakdown(BaseModel):
+    name: str
+    amount: Decimal
+
+
 class FrequentIn(BaseModel):
     description: str
 
@@ -140,6 +145,10 @@ class AccountSummary(BaseModel):
     iva_sales: Decimal | None = None
     iibb: Decimal | None = None
     percepciones: Decimal | None = None
+    iva_withholdings: Decimal | None = None
+    iibb_withholdings: Decimal | None = None
+    retentions_total: Decimal | None = None
+    other_withholdings: List[RetentionBreakdown] | None = None
 
 
 class UserCreate(BaseModel):

@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,7 +14,7 @@ from config.db import get_db, init_db, SessionLocal
 from config.constants import CURRENCY_SYMBOLS
 from models import Account, Invoice, User
 from auth import get_current_user, require_admin, hash_password
-from routes.accounts import router as accounts_router
+from routes.accounts import router as accounts_router, get_account_summary_data
 from routes.health import router as health_router
 from routes.transactions import router as transactions_router
 from routes.frequents import router as frequents_router
@@ -147,6 +149,94 @@ async def accounts_page(request: Request, user=Depends(get_current_user)):
             "title": "Cuentas",
             "header_title": "Cuentas",
             "user": user,
+        },
+    )
+
+
+@app.get("/billing-account-details.html", response_class=HTMLResponse)
+async def billing_account_details(
+    request: Request,
+    account_id: int | None = None,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    if account_id is not None:
+        account = db.get(Account, account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Cuenta no encontrada")
+    else:
+        account = db.query(Account).filter(Account.is_billing.is_(True)).first()
+        if not account:
+            raise HTTPException(
+                status_code=404, detail="Cuenta de facturación no configurada"
+            )
+
+    summary = get_account_summary_data(db, account.id)
+    symbol = CURRENCY_SYMBOLS.get(account.currency, "")
+    iva_purchases = summary.iva_purchases or Decimal("0")
+    iva_sales = summary.iva_sales or Decimal("0")
+    iva_withholdings = summary.iva_withholdings or Decimal("0")
+    iibb_withholdings = summary.iibb_withholdings or Decimal("0")
+    percepciones = summary.percepciones or Decimal("0")
+    sircreb = summary.iibb or Decimal("0")
+    other_withholdings = summary.other_withholdings or []
+    other_withholdings_total = sum(
+        (item.amount for item in other_withholdings), Decimal("0")
+    )
+    retentions_total = summary.retentions_total or (
+        iva_withholdings + iibb_withholdings + other_withholdings_total
+    )
+    cash_balance = (
+        summary.opening_balance + summary.income_balance - summary.expense_balance
+    )
+    iva_balance = iva_purchases - iva_sales
+    total_available = (
+        cash_balance + iva_balance - sircreb + percepciones + retentions_total
+    )
+
+    positive_items = [
+        {"label": "Ingresos", "value": summary.income_balance},
+    ]
+    if summary.is_billing:
+        positive_items.extend(
+            [
+                {"label": "IVA Compras", "value": iva_purchases},
+                {"label": "IVA Retenciones", "value": iva_withholdings},
+                {"label": "IIBB Retenciones", "value": iibb_withholdings},
+            ]
+        )
+    positive_items.append({"label": "Percepciones y otros", "value": percepciones})
+
+    negative_items = [
+        {"label": "Egresos", "value": summary.expense_balance},
+    ]
+    if summary.is_billing:
+        negative_items.extend(
+            [
+                {"label": "IVA Ventas", "value": iva_sales},
+                {"label": "SIRCREB", "value": sircreb},
+            ]
+        )
+
+    return templates.TemplateResponse(
+        "billing_account_details.html",
+        {
+            "request": request,
+            "title": f"Detalles de facturación - {account.name}",
+            "header_title": (
+                "Detalles de facturación - "
+                f"<span style=\"color:{account.color}\">{account.name}</span>"
+            ),
+            "user": user,
+            "account": account,
+            "summary": summary,
+            "symbol": symbol,
+            "positive_items": positive_items,
+            "negative_items": negative_items,
+            "total_available": total_available,
+            "other_retentions": other_withholdings,
+            "billing_account": account if account.is_billing else None,
+            "show_billing_sync_button": False,
         },
     )
 

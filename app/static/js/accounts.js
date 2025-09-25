@@ -44,16 +44,25 @@ async function toggleDetails(row, acc) {
   detailTd.colSpan = 2;
 
   const balance =
-    Number(summary.opening_balance) +
-    Number(summary.income_balance) -
-    Number(summary.expense_balance);
+    Number(summary.opening_balance ?? 0) +
+    Number(summary.income_balance ?? 0) -
+    Number(summary.expense_balance ?? 0);
   const ivaBalance = summary.is_billing
-    ? Number(summary.iva_purchases) - Number(summary.iva_sales)
+    ? Number(summary.iva_purchases ?? 0) - Number(summary.iva_sales ?? 0)
     : 0;
-  const percepcionesTotal = summary.is_billing ? Number(summary.percepciones) : 0;
-  const total = summary.is_billing
-    ? balance + ivaBalance - Number(summary.iibb) + percepcionesTotal
-    : balance;
+  const ivaWithholdings = summary.is_billing
+    ? Number(summary.iva_withholdings ?? 0)
+    : 0;
+  const iibbWithholdings = summary.is_billing
+    ? Number(summary.iibb_withholdings ?? 0)
+    : 0;
+  const otherWithholdings =
+    summary.is_billing && Array.isArray(summary.other_withholdings)
+      ? summary.other_withholdings.reduce(
+          (acc, item) => acc + Number(item?.amount ?? 0),
+          0
+        )
+      : 0;
 
   let html = '<div class="container text-start">';
   html += '<div class="row">';
@@ -69,11 +78,19 @@ async function toggleDetails(row, acc) {
     html += `<p><strong>IVA Ventas:</strong> <span class="text-danger">${symbol} ${formatCurrency(summary.iva_sales)}</span></p>`;
     html += `<p><strong>Balance IVA:</strong> <span class="text-dark fst-italic">${symbol} ${formatCurrency(ivaBalance)}</span></p>`;
     html += `<p><strong>SIRCREB:</strong> <span class="text-danger">${symbol} ${formatCurrency(summary.iibb)}</span></p>`;
+    html += `<p><strong>IVA Retenciones:</strong> <span class="text-success">${symbol} ${formatCurrency(ivaWithholdings)}</span></p>`;
+    html += `<p><strong>IIBB Retenciones:</strong> <span class="text-success">${symbol} ${formatCurrency(iibbWithholdings)}</span></p>`;
+    if (otherWithholdings > 0) {
+      html += `<p><strong>Otras retenciones:</strong> <span class="text-success">${symbol} ${formatCurrency(otherWithholdings)}</span></p>`;
+    }
     html += `<p><strong>Percepciones y otros:</strong> <span class="text-success">${symbol} ${formatCurrency(summary.percepciones)}</span></p>`;
     html += '</div>';
   }
   html += '</div>';
-  html += `<div class="row"><div class="col text-center"><p class="mb-0"><strong>Total Disponible:</strong> <span class="text-dark fw-bold fs-5">${symbol} ${formatCurrency(total)}</span></p></div></div>`;
+  if (summary.is_billing) {
+    const detailsUrl = `/billing-account-details.html?account_id=${acc.account_id}`;
+    html += `<div class="row mt-3"><div class="col text-center"><a class="btn btn-outline-secondary" href="${detailsUrl}">Todos los detalles</a></div></div>`;
+  }
   html += '</div>';
   detailTd.innerHTML = html;
   detailTr.appendChild(detailTd);
