@@ -15,6 +15,13 @@ const addBtn = document.getElementById('add-certificate');
 const searchBox = document.getElementById('search-box');
 const modalEl = document.getElementById('certModal');
 const certModal = new bootstrap.Modal(modalEl);
+const filterBtn = document.getElementById('filter-button');
+const filterModalEl = document.getElementById('certFilterModal');
+const filterModal = filterModalEl ? new bootstrap.Modal(filterModalEl) : null;
+const filterForm = document.getElementById('cert-filter-form');
+const filterTaxTypeSelect = filterForm?.elements['filter_tax_type_id'] || null;
+const clearFiltersBtn = document.getElementById('clear-filters');
+const filterAlert = document.getElementById('filter-alert');
 const form = document.getElementById('cert-form');
 const modalTitle = document.getElementById('cert-form-title');
 const alertBox = document.getElementById('cert-alert');
@@ -27,6 +34,11 @@ const currencySymbol = CURRENCY_SYMBOLS[currencyCode] || '';
 
 let certificates = [];
 let retainedTaxTypes = [];
+const filterState = {
+  startDate: '',
+  endDate: '',
+  taxTypeId: ''
+};
 let activeActionRow = null;
 let activeDataRow = null;
 
@@ -107,6 +119,35 @@ function populateTaxTypeSelect(selectedId = '', selectedType = null) {
   }
 }
 
+function populateFilterTaxTypeSelect(selectedValue = '') {
+  if (!filterTaxTypeSelect) return;
+  const currentValue = selectedValue ? String(selectedValue) : '';
+  filterTaxTypeSelect.innerHTML = '';
+  const allOption = document.createElement('option');
+  allOption.value = '';
+  allOption.textContent = 'Todos';
+  filterTaxTypeSelect.appendChild(allOption);
+  retainedTaxTypes.forEach(type => {
+    const option = document.createElement('option');
+    option.value = String(type.id);
+    option.textContent = type.name;
+    if (currentValue && String(type.id) === currentValue) {
+      option.selected = true;
+    }
+    filterTaxTypeSelect.appendChild(option);
+  });
+  if (
+    currentValue &&
+    !Array.from(filterTaxTypeSelect.options).some(option => option.value === currentValue)
+  ) {
+    const placeholder = document.createElement('option');
+    placeholder.value = currentValue;
+    placeholder.textContent = 'Seleccionado';
+    placeholder.selected = true;
+    filterTaxTypeSelect.appendChild(placeholder);
+  }
+}
+
 function updateTaxTypeAvailability() {
   if (!addBtn) return;
   if (retainedTaxTypes.length === 0) {
@@ -181,9 +222,38 @@ function toggleActionRow(row, cert) {
   showActionRow(row, cert);
 }
 
+function matchesFilters(cert) {
+  if (filterState.startDate) {
+    const certDate = new Date(cert.date);
+    if (certDate < new Date(filterState.startDate)) {
+      return false;
+    }
+  }
+  if (filterState.endDate) {
+    const certDate = new Date(cert.date);
+    if (certDate > new Date(filterState.endDate)) {
+      return false;
+    }
+  }
+  if (filterState.taxTypeId) {
+    const certTaxId =
+      cert.retained_tax_type_id ??
+      cert.retained_tax_type?.id ??
+      cert.tax_type?.id ??
+      null;
+    if (!certTaxId || String(certTaxId) !== filterState.taxTypeId) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function renderCertificates() {
   const query = searchBox.value.trim().toLowerCase();
   const filtered = certificates.filter(cert => {
+    if (!matchesFilters(cert)) {
+      return false;
+    }
     const number = cert.number?.toLowerCase() || '';
     const invoiceRef = cert.invoice_reference?.toLowerCase() || '';
     const taxType = cert.tax_type_name?.toLowerCase() || '';
@@ -240,6 +310,17 @@ function setDateLimits() {
   form.date.max = today;
 }
 
+function setFilterDateLimits() {
+  if (!filterForm) return;
+  const today = new Date().toISOString().split('T')[0];
+  if (filterForm.start_date) {
+    filterForm.start_date.max = today;
+  }
+  if (filterForm.end_date) {
+    filterForm.end_date.max = today;
+  }
+}
+
 function openCreateModal() {
   clearActionRow();
   form.reset();
@@ -286,6 +367,7 @@ async function loadData() {
     retainedTaxTypes = Array.isArray(taxData) ? taxData : [];
     const currentSelection = taxTypeSelect ? taxTypeSelect.value : '';
     populateTaxTypeSelect(currentSelection);
+    populateFilterTaxTypeSelect(filterState.taxTypeId);
     updateTaxTypeAvailability();
     certificates = Array.isArray(certData)
       ? certData.map(normalizeCertificate)
@@ -294,6 +376,18 @@ async function loadData() {
   } finally {
     hideOverlay();
   }
+}
+
+function clearFilterError() {
+  if (!filterAlert) return;
+  filterAlert.classList.add('d-none');
+  filterAlert.textContent = '';
+}
+
+function showFilterError(message) {
+  if (!filterAlert) return;
+  filterAlert.textContent = message;
+  filterAlert.classList.remove('d-none');
 }
 
 function showError(message) {
@@ -408,6 +502,58 @@ if (isAdmin) {
   document.addEventListener('click', event => {
     if (!table.contains(event.target)) {
       clearActionRow();
+    }
+  });
+}
+
+if (filterBtn && filterModal) {
+  filterBtn.addEventListener('click', () => {
+    if (!filterForm) return;
+    setFilterDateLimits();
+    filterForm.start_date.value = filterState.startDate || '';
+    filterForm.end_date.value = filterState.endDate || '';
+    populateFilterTaxTypeSelect(filterState.taxTypeId);
+    clearFilterError();
+    filterModal.show();
+  });
+}
+
+if (filterForm) {
+  filterForm.addEventListener('submit', event => {
+    event.preventDefault();
+    clearFilterError();
+    const startDate = filterForm.start_date.value;
+    const endDate = filterForm.end_date.value;
+    const selectedTaxType = filterTaxTypeSelect ? filterTaxTypeSelect.value : '';
+
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+      showFilterError('La fecha inicio no puede ser posterior a la fecha fin');
+      return;
+    }
+
+    filterState.startDate = startDate;
+    filterState.endDate = endDate;
+    filterState.taxTypeId = selectedTaxType;
+    renderCertificates();
+    if (filterModal) {
+      filterModal.hide();
+    }
+  });
+}
+
+if (clearFiltersBtn) {
+  clearFiltersBtn.addEventListener('click', () => {
+    if (filterForm) {
+      filterForm.reset();
+      populateFilterTaxTypeSelect('');
+    }
+    filterState.startDate = '';
+    filterState.endDate = '';
+    filterState.taxTypeId = '';
+    clearFilterError();
+    renderCertificates();
+    if (filterModal) {
+      filterModal.hide();
     }
   });
 }
