@@ -3,7 +3,10 @@
   <div id="table-container" class="flex-grow-1 overflow-auto">
     <div id="table-controls" class="d-flex align-items-center justify-content-center my-4">
       <button id="add-sale" class="btn action-btn d-inline-flex align-items-center"><i class="bi bi-file-earmark-arrow-up me-1"></i>Venta</button>
-      <input id="search-box" class="form-control" type="search" placeholder="Buscar">
+      <div class="input-group table-search-group flex-grow-1 flex-md-grow-0">
+        <input id="search-box" class="form-control" type="search" placeholder="Buscar">
+        <button type="button" class="btn btn-outline-primary table-filter-btn d-inline-flex align-items-center" id="inv-filter-button"><i class="bi bi-funnel me-2"></i>Filtros</button>
+      </div>
       <button id="add-purchase" class="btn action-btn d-inline-flex align-items-center"><i class="bi bi-file-earmark-arrow-down me-1"></i>Compra</button>
     </div>
     <div id="inv-table-wrapper" class="table-responsive">
@@ -26,6 +29,46 @@
         </thead>
         <tbody></tbody>
       </table>
+    </div>
+  </div>
+  <div class="modal fade" id="invFilterModal" tabindex="-1" aria-labelledby="inv-filter-title">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form id="inv-filter-form">
+          <div class="modal-header">
+            <h5 class="modal-title" id="inv-filter-title">Filtros</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-3 mb-3">
+              <div class="col-sm-6">
+                <label class="form-label w-100">Fecha inicio
+                  <input type="date" name="start_date" class="form-control">
+                </label>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label w-100">Fecha fin
+                  <input type="date" name="end_date" class="form-control">
+                </label>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label w-100">Tipo
+                <select name="filter_type" class="form-select">
+                  <option value="">Todos</option>
+                  <option value="sale">Venta</option>
+                  <option value="purchase">Compra</option>
+                </select>
+              </label>
+            </div>
+            <div id="inv-filter-alert" class="alert alert-danger d-none" role="alert"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" id="inv-clear-filters">Limpiar</button>
+            <button type="submit" class="btn btn-primary">Aplicar</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
   <div class="modal fade" id="invModal" tabindex="-1">

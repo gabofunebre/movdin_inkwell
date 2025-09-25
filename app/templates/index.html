@@ -3,7 +3,10 @@
   <div id="table-container" class="flex-grow-1 overflow-auto">
     <div id="table-controls" class="d-flex align-items-center justify-content-center my-4">
       <button id="add-income" class="btn border border-primary text-primary action-btn d-inline-flex align-items-center"><i class="bi bi-box-arrow-in-right me-1"></i>Ingreso</button>
-      <input id="search-box" class="form-control" type="search" placeholder="Buscar">
+      <div class="input-group table-search-group flex-grow-1 flex-md-grow-0">
+        <input id="search-box" class="form-control" type="search" placeholder="Buscar">
+        <button type="button" class="btn btn-outline-primary table-filter-btn d-inline-flex align-items-center" id="tx-filter-button"><i class="bi bi-funnel me-2"></i>Filtros</button>
+      </div>
       <button id="add-expense" class="btn border border-warning action-btn d-inline-flex align-items-center"><i class="bi bi-box-arrow-right me-1"></i>Egreso</button>
     </div>
     <div id="tx-table-wrapper" class="table-responsive">
@@ -24,6 +27,44 @@
         </thead>
         <tbody></tbody>
       </table>
+    </div>
+  </div>
+  <div class="modal fade" id="txFilterModal" tabindex="-1" aria-labelledby="tx-filter-title">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form id="tx-filter-form">
+          <div class="modal-header">
+            <h5 class="modal-title" id="tx-filter-title">Filtros</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-3 mb-3">
+              <div class="col-sm-6">
+                <label class="form-label w-100">Fecha inicio
+                  <input type="date" name="start_date" class="form-control">
+                </label>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label w-100">Fecha fin
+                  <input type="date" name="end_date" class="form-control">
+                </label>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label w-100">Cuenta
+                <select name="filter_account_id" class="form-select">
+                  <option value="">Todas</option>
+                </select>
+              </label>
+            </div>
+            <div id="tx-filter-alert" class="alert alert-danger d-none" role="alert"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" id="tx-clear-filters">Limpiar</button>
+            <button type="submit" class="btn btn-primary">Aplicar</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
   <div class="modal fade" id="txModal" tabindex="-1">
