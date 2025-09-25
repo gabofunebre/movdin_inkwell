@@ -31,6 +31,7 @@ const isAdmin = Boolean(window.isAdmin);
 const columnCount = table.querySelectorAll('thead th').length;
 const currencyCode = window.certCurrency || 'ARS';
 const currencySymbol = CURRENCY_SYMBOLS[currencyCode] || '';
+const totalValueEl = document.getElementById('cert-total-value');
 
 let certificates = [];
 let retainedTaxTypes = [];
@@ -248,6 +249,11 @@ function matchesFilters(cert) {
   return true;
 }
 
+function updateTotalDisplay(total) {
+  if (!totalValueEl) return;
+  totalValueEl.textContent = `${currencySymbol} ${formatCurrency(total)}`;
+}
+
 function renderCertificates() {
   const query = searchBox.value.trim().toLowerCase();
   const filtered = certificates.filter(cert => {
@@ -271,6 +277,8 @@ function renderCertificates() {
   });
   clearActionRow();
   tbody.innerHTML = '';
+  let totalAmount = 0;
+
   filtered.forEach(cert => {
     const tr = document.createElement('tr');
     tr.dataset.id = cert.id;
@@ -293,7 +301,9 @@ function renderCertificates() {
     const amountTd = document.createElement('td');
     amountTd.className = 'text-end';
     const amountValue = Number.isFinite(cert.amount) ? cert.amount : 0;
-    amountTd.textContent = `${currencySymbol} ${formatCurrency(Math.abs(amountValue))}`;
+    const displayAmount = Math.abs(amountValue);
+    amountTd.textContent = `${currencySymbol} ${formatCurrency(displayAmount)}`;
+    totalAmount += displayAmount;
 
     tr.append(numberTd, dateTd, refTd, taxTd, amountTd);
     if (isAdmin) {
@@ -303,6 +313,8 @@ function renderCertificates() {
 
     tbody.appendChild(tr);
   });
+
+  updateTotalDisplay(totalAmount);
 }
 
 function setDateLimits() {
@@ -559,4 +571,5 @@ if (clearFiltersBtn) {
 }
 
 updateTaxTypeAvailability();
+updateTotalDisplay(0);
 loadData();
