@@ -4,6 +4,7 @@ services:
     container_name: db_iw-dev
     env_file:
       - .env
+    restart: unless-stopped
     volumes:
       - ${POSTGRES_DATA_PATH}:/var/lib/postgresql/data
     networks:
