@@ -24,6 +24,13 @@ const txModal = new bootstrap.Modal(modalEl);
 const form = document.getElementById('tx-form');
 const alertBox = document.getElementById('tx-alert');
 const searchBox = document.getElementById('search-box');
+const filterButton = document.getElementById('tx-filter-button');
+const filterModalEl = document.getElementById('txFilterModal');
+const filterModal = filterModalEl ? new bootstrap.Modal(filterModalEl) : null;
+const filterForm = document.getElementById('tx-filter-form');
+const filterAccountSelect = filterForm?.elements['filter_account_id'] || null;
+const filterAlert = document.getElementById('tx-filter-alert');
+const clearFiltersBtn = document.getElementById('tx-clear-filters');
 const headers = document.querySelectorAll('#tx-table thead th.sortable');
 const freqCheck = document.getElementById('freq-check');
 const freqSelect = document.getElementById('freq-select');
@@ -66,10 +73,28 @@ let sortColumn = 0;
 let sortAsc = false;
 let frequents = [];
 let frequentMap = {};
+const filterState = {
+  startDate: '',
+  endDate: '',
+  accountId: ''
+};
 
 function renderTransactions() {
   const q = searchBox.value.trim().toLowerCase();
+  const startDate = filterState.startDate ? new Date(filterState.startDate) : null;
+  const endDate = filterState.endDate ? new Date(filterState.endDate) : null;
+  const accountId = filterState.accountId;
   const filtered = transactions.filter(tx => {
+    const txDate = new Date(tx.date);
+    if (startDate && txDate < startDate) {
+      return false;
+    }
+    if (endDate && txDate > endDate) {
+      return false;
+    }
+    if (accountId && String(tx.account_id) !== accountId) {
+      return false;
+    }
     const accName = accountMap[tx.account_id]?.name.toLowerCase() || '';
     return tx.description.toLowerCase().includes(q) || accName.includes(q);
   });
@@ -176,6 +201,59 @@ async function confirmDelete(tx) {
 document.getElementById('add-income').addEventListener('click', () => openModal('income'));
 document.getElementById('add-expense').addEventListener('click', () => openModal('expense'));
 searchBox.addEventListener('input', renderTransactions);
+if (filterButton && filterModal && filterForm) {
+  filterButton.addEventListener('click', () => {
+    const today = new Date().toISOString().split('T')[0];
+    if (filterForm.start_date) {
+      filterForm.start_date.max = today;
+      filterForm.start_date.value = filterState.startDate || '';
+    }
+    if (filterForm.end_date) {
+      filterForm.end_date.max = today;
+      filterForm.end_date.value = filterState.endDate || '';
+    }
+    populateFilterAccounts(filterState.accountId);
+    hideFilterAlert();
+    filterModal.show();
+  });
+}
+
+if (filterForm) {
+  filterForm.addEventListener('submit', event => {
+    event.preventDefault();
+    const startDate = filterForm.start_date?.value || '';
+    const endDate = filterForm.end_date?.value || '';
+    if (startDate && endDate && startDate > endDate) {
+      showFilterAlert('La fecha inicio no puede ser posterior a la fecha fin');
+      return;
+    }
+    filterState.startDate = startDate;
+    filterState.endDate = endDate;
+    filterState.accountId = filterForm.filter_account_id?.value || '';
+    hideFilterAlert();
+    if (filterModal) {
+      filterModal.hide();
+    }
+    renderTransactions();
+  });
+}
+
+if (clearFiltersBtn) {
+  clearFiltersBtn.addEventListener('click', () => {
+    if (filterForm) {
+      filterForm.reset();
+    }
+    filterState.startDate = '';
+    filterState.endDate = '';
+    filterState.accountId = '';
+    hideFilterAlert();
+    if (filterModal) {
+      filterModal.hide();
+    }
+    renderTransactions();
+  });
+}
+
 freqCheck.addEventListener('change', () => {
   if (freqCheck.checked) {
     populateFreqSelect();
@@ -208,6 +286,39 @@ function populateFreqSelect() {
 function applyFrequent(f) {
   if (!f) return;
   descInput.value = f.description;
+}
+
+function populateFilterAccounts(selected = '') {
+  if (!filterAccountSelect) return;
+  filterAccountSelect.innerHTML = '';
+  const allOption = document.createElement('option');
+  allOption.value = '';
+  allOption.textContent = 'Todas';
+  filterAccountSelect.appendChild(allOption);
+  const availableAccounts = accounts.filter(a => a.is_active);
+  availableAccounts
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach(account => {
+      const option = document.createElement('option');
+      option.value = String(account.id);
+      option.textContent = account.name;
+      if (selected && option.value === selected) {
+        option.selected = true;
+      }
+      filterAccountSelect.appendChild(option);
+    });
+}
+
+function hideFilterAlert() {
+  if (!filterAlert) return;
+  filterAlert.classList.add('d-none');
+  filterAlert.textContent = '';
+}
+
+function showFilterAlert(message) {
+  if (!filterAlert) return;
+  filterAlert.textContent = message;
+  filterAlert.classList.remove('d-none');
 }
 
 function updateBillingNotificationBadge(count) {
@@ -470,6 +581,7 @@ form.addEventListener('submit', async e => {
 (async function init() {
   accounts = await fetchAccounts(true);
   accountMap = Object.fromEntries(accounts.map(a => [a.id, a]));
+  populateFilterAccounts(filterState.accountId);
   frequents = await fetchFrequents();
   frequentMap = Object.fromEntries(frequents.map(f => [f.id, f]));
   await loadMore();

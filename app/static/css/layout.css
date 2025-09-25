@@ -434,20 +434,20 @@ a[data-bs-toggle="collapse"][aria-expanded="true"] .menu-chevron {
   height: calc(1.5em + 0.75rem + 2px);
   padding-inline: 1.25rem;
   border-radius: 0.5rem;
-  border-color: #ced4da;
-  background-color: #f8f9fa;
-  color: #495057;
+  border-color: #0d6efd;
+  background-color: #fff;
+  color: #0d6efd;
   box-shadow: none;
 }
 
 .table-search-group .table-filter-btn:hover,
 .table-search-group .table-filter-btn:focus {
-  background-color: #e9ecef;
-  color: #212529;
+  background-color: #e7f1ff;
+  color: #0a58ca;
 }
 
 .table-search-group .table-filter-btn:focus {
-  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.35);
 }
 
 #add-expense {

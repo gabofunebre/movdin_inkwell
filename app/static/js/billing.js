@@ -9,6 +9,12 @@ const invModal = new bootstrap.Modal(modalEl);
 const form = document.getElementById('inv-form');
 const alertBox = document.getElementById('inv-alert');
 const searchBox = document.getElementById('search-box');
+const filterButton = document.getElementById('inv-filter-button');
+const filterModalEl = document.getElementById('invFilterModal');
+const filterModal = filterModalEl ? new bootstrap.Modal(filterModalEl) : null;
+const filterForm = document.getElementById('inv-filter-form');
+const filterAlert = document.getElementById('inv-filter-alert');
+const clearFiltersBtn = document.getElementById('inv-clear-filters');
 const headers = document.querySelectorAll('#inv-table thead th.sortable');
 const amountInput = form.amount;
 const ivaPercentInput = form.iva_percent;
@@ -88,6 +94,18 @@ function roundToTwo(value) {
   if (!Number.isFinite(num)) return 0;
   return Math.round((num + Number.EPSILON) * 100) / 100;
 }
+
+function hideFilterAlert() {
+  if (!filterAlert) return;
+  filterAlert.classList.add('d-none');
+  filterAlert.textContent = '';
+}
+
+function showFilterAlert(message) {
+  if (!filterAlert) return;
+  filterAlert.textContent = message;
+  filterAlert.classList.remove('d-none');
+}
 let offset = 0;
 const limit = 50;
 let loading = false;
@@ -97,10 +115,28 @@ let billingAccount = null;
 let invoices = [];
 let sortColumn = 1;
 let sortAsc = false;
+const filterState = {
+  startDate: '',
+  endDate: '',
+  type: ''
+};
 
 function renderInvoices() {
   const q = searchBox.value.trim().toLowerCase();
+  const startDate = filterState.startDate ? new Date(filterState.startDate) : null;
+  const endDate = filterState.endDate ? new Date(filterState.endDate) : null;
+  const typeFilter = filterState.type;
   const filtered = invoices.filter(inv => {
+    const invDate = new Date(inv.date);
+    if (startDate && invDate < startDate) {
+      return false;
+    }
+    if (endDate && invDate > endDate) {
+      return false;
+    }
+    if (typeFilter && inv.type !== typeFilter) {
+      return false;
+    }
     const typeText = inv.type === 'sale' ? 'venta' : 'compra';
     return (
       inv.description.toLowerCase().includes(q) ||
@@ -344,6 +380,61 @@ function openModal(type) {
 document.getElementById('add-sale').addEventListener('click', () => openModal('sale'));
 document.getElementById('add-purchase').addEventListener('click', () => openModal('purchase'));
 searchBox.addEventListener('input', renderInvoices);
+
+if (filterButton && filterModal && filterForm) {
+  filterButton.addEventListener('click', () => {
+    const today = new Date().toISOString().split('T')[0];
+    if (filterForm.start_date) {
+      filterForm.start_date.max = today;
+      filterForm.start_date.value = filterState.startDate || '';
+    }
+    if (filterForm.end_date) {
+      filterForm.end_date.max = today;
+      filterForm.end_date.value = filterState.endDate || '';
+    }
+    if (filterForm.filter_type) {
+      filterForm.filter_type.value = filterState.type || '';
+    }
+    hideFilterAlert();
+    filterModal.show();
+  });
+}
+
+if (filterForm) {
+  filterForm.addEventListener('submit', event => {
+    event.preventDefault();
+    const startDate = filterForm.start_date?.value || '';
+    const endDate = filterForm.end_date?.value || '';
+    if (startDate && endDate && startDate > endDate) {
+      showFilterAlert('La fecha inicio no puede ser posterior a la fecha fin');
+      return;
+    }
+    filterState.startDate = startDate;
+    filterState.endDate = endDate;
+    filterState.type = filterForm.filter_type?.value || '';
+    hideFilterAlert();
+    if (filterModal) {
+      filterModal.hide();
+    }
+    renderInvoices();
+  });
+}
+
+if (clearFiltersBtn) {
+  clearFiltersBtn.addEventListener('click', () => {
+    if (filterForm) {
+      filterForm.reset();
+    }
+    filterState.startDate = '';
+    filterState.endDate = '';
+    filterState.type = '';
+    hideFilterAlert();
+    if (filterModal) {
+      filterModal.hide();
+    }
+    renderInvoices();
+  });
+}
 
 headers.forEach((th, index) => {
   th.addEventListener('click', () => {
