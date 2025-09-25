@@ -2,6 +2,14 @@ body {
   font-family: sans-serif;
 }
 
+.menu-chevron {
+  transition: transform 0.2s ease;
+}
+
+a[data-bs-toggle="collapse"][aria-expanded="true"] .menu-chevron {
+  transform: rotate(180deg);
+}
+
 #billing-sync-button {
   position: relative;
   display: inline-flex;

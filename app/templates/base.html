@@ -16,18 +16,6 @@
       <button id="menu-button" class="navbar-toggler p-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#sideMenu" aria-controls="sideMenu">
         <span class="navbar-toggler-icon"></span>
       </button>
-      {% if more_documents %}
-      <div class="dropdown" id="more-documents">
-        <button class="dropdown-toggle header-more-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-          Más Documentos
-        </button>
-        <ul class="dropdown-menu shadow">
-          {% for doc in more_documents %}
-          <li><a class="dropdown-item{% if doc.active %} active{% endif %}" href="{{ doc.url }}"{% if doc.active %} aria-current="page"{% endif %}>{{ doc.label }}</a></li>
-          {% endfor %}
-        </ul>
-      </div>
-      {% endif %}
       {% if billing_account and show_billing_sync_button %}
       <button id="billing-sync-button" type="button"
         class="btn ms-3"
@@ -47,9 +35,24 @@
       <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
     </div>
     <div class="offcanvas-body d-flex flex-column">
+      {% set billing_section_paths = ["/billing.html", "/certificados-retencion.html"] %}
+      {% set billing_section_active = request.url.path in billing_section_paths %}
       <ul class="list-unstyled">
         <li class="mb-2"><a href="/" class="text-decoration-none fs-5"><i class="bi bi-house me-2"></i>Movimientos</a></li>
-        <li class="mb-2"><a href="/billing.html" class="text-decoration-none fs-5"><i class="bi bi-receipt me-2"></i>Facturación</a></li>
+        <li class="mb-2">
+          <a class="text-decoration-none fs-5 d-flex align-items-center justify-content-between" data-bs-toggle="collapse" href="#billing-submenu" role="button" aria-expanded="{{ 'true' if billing_section_active else 'false' }}" aria-controls="billing-submenu">
+            <span><i class="bi bi-receipt me-2"></i>Facturación</span>
+            <i class="bi bi-chevron-down ms-2 menu-chevron"></i>
+          </a>
+          <ul class="list-unstyled collapse{% if billing_section_active %} show{% endif %}" id="billing-submenu">
+            <li class="mb-2 ms-4">
+              <a href="/billing.html" class="text-decoration-none fs-6 d-block{% if request.url.path == '/billing.html' %} fw-semibold{% endif %}">Facturas</a>
+            </li>
+            <li class="mb-2 ms-4">
+              <a href="/certificados-retencion.html" class="text-decoration-none fs-6 d-block{% if request.url.path == '/certificados-retencion.html' %} fw-semibold{% endif %}">Certificados de retención</a>
+            </li>
+          </ul>
+        </li>
         <li class="mb-2"><a href="/accounts.html" class="text-decoration-none fs-5"><i class="bi bi-graph-up me-2"></i>Cuentas</a></li>
         {% if user %}
         <li class="mb-2"><a href="/users" class="text-decoration-none fs-5"><i class="bi bi-people me-2"></i>Usuarios</a></li>
