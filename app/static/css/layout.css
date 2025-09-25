@@ -2,6 +2,11 @@ body {
   font-family: sans-serif;
 }
 
+.side-menu-link {
+  font-size: 1.35rem;
+  line-height: 1.75;
+}
+
 .menu-chevron {
   transition: transform 0.2s ease;
 }

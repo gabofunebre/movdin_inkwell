@@ -38,30 +38,30 @@
       {% set billing_section_paths = ["/billing.html", "/certificados-retencion.html"] %}
       {% set billing_section_active = request.url.path in billing_section_paths %}
       <ul class="list-unstyled">
-        <li class="mb-2"><a href="/" class="text-decoration-none fs-5"><i class="bi bi-house me-2"></i>Movimientos</a></li>
+        <li class="mb-2"><a href="/" class="text-decoration-none side-menu-link"><i class="bi bi-house me-2"></i>Movimientos</a></li>
         <li class="mb-2">
-          <a class="text-decoration-none fs-5 d-flex align-items-center justify-content-between" data-bs-toggle="collapse" href="#billing-submenu" role="button" aria-expanded="{{ 'true' if billing_section_active else 'false' }}" aria-controls="billing-submenu">
+          <a class="text-decoration-none side-menu-link d-flex align-items-center justify-content-between" data-bs-toggle="collapse" href="#billing-submenu" role="button" aria-expanded="{{ 'true' if billing_section_active else 'false' }}" aria-controls="billing-submenu">
             <span><i class="bi bi-receipt me-2"></i>Facturación</span>
             <i class="bi bi-chevron-down ms-2 menu-chevron"></i>
           </a>
-          <ul class="list-unstyled collapse{% if billing_section_active %} show{% endif %}" id="billing-submenu">
+          <ul class="list-unstyled side-menu-submenu collapse{% if billing_section_active %} show{% endif %}" id="billing-submenu">
             <li class="mb-2 ms-4">
-              <a href="/billing.html" class="text-decoration-none fs-6 d-block{% if request.url.path == '/billing.html' %} fw-semibold{% endif %}">Facturas</a>
+              <a href="/billing.html" class="text-decoration-none side-menu-link d-block{% if request.url.path == '/billing.html' %} fw-semibold{% endif %}">Facturas</a>
             </li>
             <li class="mb-2 ms-4">
-              <a href="/certificados-retencion.html" class="text-decoration-none fs-6 d-block{% if request.url.path == '/certificados-retencion.html' %} fw-semibold{% endif %}">Certificados de retención</a>
+              <a href="/certificados-retencion.html" class="text-decoration-none side-menu-link d-block{% if request.url.path == '/certificados-retencion.html' %} fw-semibold{% endif %}">Certificados de retención</a>
             </li>
           </ul>
         </li>
-        <li class="mb-2"><a href="/accounts.html" class="text-decoration-none fs-5"><i class="bi bi-graph-up me-2"></i>Cuentas</a></li>
+        <li class="mb-2"><a href="/accounts.html" class="text-decoration-none side-menu-link"><i class="bi bi-graph-up me-2"></i>Cuentas</a></li>
         {% if user %}
-        <li class="mb-2"><a href="/users" class="text-decoration-none fs-5"><i class="bi bi-people me-2"></i>Usuarios</a></li>
+        <li class="mb-2"><a href="/users" class="text-decoration-none side-menu-link"><i class="bi bi-people me-2"></i>Usuarios</a></li>
         {% if user.is_admin %}
-        <li class="mb-2"><a href="/config.html" class="text-decoration-none fs-5"><i class="bi bi-gear me-2"></i>Configuración</a></li>
+        <li class="mb-2"><a href="/config.html" class="text-decoration-none side-menu-link"><i class="bi bi-gear me-2"></i>Configuración</a></li>
         {% endif %}
-        <li><a href="/logout" class="text-decoration-none fs-5"><i class="bi bi-box-arrow-right me-2"></i>Salir</a></li>
+        <li><a href="/logout" class="text-decoration-none side-menu-link"><i class="bi bi-box-arrow-right me-2"></i>Salir</a></li>
         {% else %}
-        <li><a href="/login" class="text-decoration-none fs-5"><i class="bi bi-box-arrow-in-right me-2"></i>Ingresar</a></li>
+        <li><a href="/login" class="text-decoration-none side-menu-link"><i class="bi bi-box-arrow-in-right me-2"></i>Ingresar</a></li>
         {% endif %}
       </ul>
       <img src="/static/images/logo_long.png" alt="TransArgentina logo" class="img-fluid mt-auto mx-auto">
