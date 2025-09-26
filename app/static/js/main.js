@@ -31,6 +31,9 @@ const filterForm = document.getElementById('tx-filter-form');
 const filterAccountSelect = filterForm?.elements['filter_account_id'] || null;
 const filterAlert = document.getElementById('tx-filter-alert');
 const clearFiltersBtn = document.getElementById('tx-clear-filters');
+const filterSummary = document.getElementById('tx-filter-summary');
+const filterSummaryItems = document.getElementById('tx-filter-summary-items');
+const filterSummaryClear = document.getElementById('tx-filter-summary-clear');
 const headers = document.querySelectorAll('#tx-table thead th.sortable');
 const freqCheck = document.getElementById('freq-check');
 const freqSelect = document.getElementById('freq-select');
@@ -79,6 +82,74 @@ const filterState = {
   accountId: ''
 };
 
+function formatFilterDate(value) {
+  if (!value) return '';
+  const parts = value.split('-');
+  if (parts.length !== 3) return value;
+  const [year, month, day] = parts;
+  return `${day}/${month}/${year}`;
+}
+
+function getAccountLabel(accountId) {
+  if (!accountId) return '';
+  const account = accountMap?.[accountId];
+  if (account?.name) {
+    return account.name;
+  }
+  return `#${accountId}`;
+}
+
+function updateFilterSummary() {
+  if (!filterSummary || !filterSummaryItems) return;
+  const chips = [];
+  if (filterState.startDate) {
+    chips.push({ label: 'Desde', value: formatFilterDate(filterState.startDate) });
+  }
+  if (filterState.endDate) {
+    chips.push({ label: 'Hasta', value: formatFilterDate(filterState.endDate) });
+  }
+  if (filterState.accountId) {
+    chips.push({ label: 'Cuenta', value: getAccountLabel(filterState.accountId) });
+  }
+
+  filterSummaryItems.innerHTML = '';
+
+  if (!chips.length) {
+    filterSummary.classList.add('d-none');
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  chips.forEach(chipData => {
+    const chip = document.createElement('span');
+    chip.className = 'filter-summary-chip';
+    const label = document.createElement('span');
+    label.className = 'filter-summary-chip-label';
+    label.textContent = `${chipData.label}:`;
+    const value = document.createElement('span');
+    value.textContent = chipData.value;
+    chip.append(label, value);
+    fragment.appendChild(chip);
+  });
+
+  filterSummaryItems.appendChild(fragment);
+  filterSummary.classList.remove('d-none');
+}
+
+function clearTransactionFilters() {
+  if (filterForm) {
+    filterForm.reset();
+  }
+  filterState.startDate = '';
+  filterState.endDate = '';
+  filterState.accountId = '';
+  hideFilterAlert();
+  if (filterModal) {
+    filterModal.hide();
+  }
+  renderTransactions();
+}
+
 function renderTransactions() {
   const q = searchBox.value.trim().toLowerCase();
   const startDate = filterState.startDate ? new Date(filterState.startDate) : null;
@@ -120,6 +191,7 @@ function renderTransactions() {
   });
   tbody.innerHTML = '';
   filtered.forEach(tx => renderTransaction(tbody, tx, accountMap, openEditModal, confirmDelete));
+  updateFilterSummary();
 }
 
 async function loadMore() {
@@ -240,17 +312,14 @@ if (filterForm) {
 
 if (clearFiltersBtn) {
   clearFiltersBtn.addEventListener('click', () => {
-    if (filterForm) {
-      filterForm.reset();
-    }
-    filterState.startDate = '';
-    filterState.endDate = '';
-    filterState.accountId = '';
-    hideFilterAlert();
-    if (filterModal) {
-      filterModal.hide();
-    }
-    renderTransactions();
+    clearTransactionFilters();
+  });
+}
+
+if (filterSummaryClear) {
+  filterSummaryClear.addEventListener('click', event => {
+    event.preventDefault();
+    clearTransactionFilters();
   });
 }
 
@@ -582,6 +651,7 @@ form.addEventListener('submit', async e => {
   accounts = await fetchAccounts(true);
   accountMap = Object.fromEntries(accounts.map(a => [a.id, a]));
   populateFilterAccounts(filterState.accountId);
+  updateFilterSummary();
   frequents = await fetchFrequents();
   frequentMap = Object.fromEntries(frequents.map(f => [f.id, f]));
   await loadMore();
