@@ -15,6 +15,9 @@ const filterModal = filterModalEl ? new bootstrap.Modal(filterModalEl) : null;
 const filterForm = document.getElementById('inv-filter-form');
 const filterAlert = document.getElementById('inv-filter-alert');
 const clearFiltersBtn = document.getElementById('inv-clear-filters');
+const filterSummary = document.getElementById('inv-filter-summary');
+const filterSummaryItems = document.getElementById('inv-filter-summary-items');
+const filterSummaryClear = document.getElementById('inv-filter-summary-clear');
 const headers = document.querySelectorAll('#inv-table thead th.sortable');
 const amountInput = form.amount;
 const ivaPercentInput = form.iva_percent;
@@ -121,6 +124,71 @@ const filterState = {
   type: ''
 };
 
+function formatFilterDate(value) {
+  if (!value) return '';
+  const parts = value.split('-');
+  if (parts.length !== 3) return value;
+  const [year, month, day] = parts;
+  return `${day}/${month}/${year}`;
+}
+
+function getInvoiceTypeLabel(type) {
+  if (type === 'sale') return 'Venta';
+  if (type === 'purchase') return 'Compra';
+  return type || '';
+}
+
+function updateFilterSummary() {
+  if (!filterSummary || !filterSummaryItems) return;
+  const chips = [];
+  if (filterState.startDate) {
+    chips.push({ label: 'Desde', value: formatFilterDate(filterState.startDate) });
+  }
+  if (filterState.endDate) {
+    chips.push({ label: 'Hasta', value: formatFilterDate(filterState.endDate) });
+  }
+  if (filterState.type) {
+    chips.push({ label: 'Tipo', value: getInvoiceTypeLabel(filterState.type) });
+  }
+
+  filterSummaryItems.innerHTML = '';
+
+  if (!chips.length) {
+    filterSummary.classList.add('d-none');
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  chips.forEach(chipData => {
+    const chip = document.createElement('span');
+    chip.className = 'filter-summary-chip';
+    const label = document.createElement('span');
+    label.className = 'filter-summary-chip-label';
+    label.textContent = `${chipData.label}:`;
+    const value = document.createElement('span');
+    value.textContent = chipData.value;
+    chip.append(label, value);
+    fragment.appendChild(chip);
+  });
+
+  filterSummaryItems.appendChild(fragment);
+  filterSummary.classList.remove('d-none');
+}
+
+function clearInvoiceFilters() {
+  if (filterForm) {
+    filterForm.reset();
+  }
+  filterState.startDate = '';
+  filterState.endDate = '';
+  filterState.type = '';
+  hideFilterAlert();
+  if (filterModal) {
+    filterModal.hide();
+  }
+  renderInvoices();
+}
+
 function renderInvoices() {
   const q = searchBox.value.trim().toLowerCase();
   const startDate = filterState.startDate ? new Date(filterState.startDate) : null;
@@ -179,6 +247,7 @@ function renderInvoices() {
   });
   tbody.innerHTML = '';
   filtered.forEach(inv => renderInvoice(tbody, inv, accountMap));
+  updateFilterSummary();
 }
 
 function recalcTaxes() {
@@ -422,17 +491,14 @@ if (filterForm) {
 
 if (clearFiltersBtn) {
   clearFiltersBtn.addEventListener('click', () => {
-    if (filterForm) {
-      filterForm.reset();
-    }
-    filterState.startDate = '';
-    filterState.endDate = '';
-    filterState.type = '';
-    hideFilterAlert();
-    if (filterModal) {
-      filterModal.hide();
-    }
-    renderInvoices();
+    clearInvoiceFilters();
+  });
+}
+
+if (filterSummaryClear) {
+  filterSummaryClear.addEventListener('click', event => {
+    event.preventDefault();
+    clearInvoiceFilters();
   });
 }
 
@@ -530,6 +596,7 @@ container.addEventListener('scroll', () => {
   accounts = await fetchAccounts(true);
   accountMap = Object.fromEntries(accounts.map(a => [a.id, a]));
   billingAccount = accounts.find(a => a.is_billing);
+  updateFilterSummary();
   await loadMore();
   updateSortIcons();
 })();

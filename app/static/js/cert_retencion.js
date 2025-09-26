@@ -22,6 +22,9 @@ const filterForm = document.getElementById('cert-filter-form');
 const filterTaxTypeSelect = filterForm?.elements['filter_tax_type_id'] || null;
 const clearFiltersBtn = document.getElementById('clear-filters');
 const filterAlert = document.getElementById('filter-alert');
+const filterSummary = document.getElementById('cert-filter-summary');
+const filterSummaryItems = document.getElementById('cert-filter-summary-items');
+const filterSummaryClear = document.getElementById('cert-filter-summary-clear');
 const form = document.getElementById('cert-form');
 const modalTitle = document.getElementById('cert-form-title');
 const alertBox = document.getElementById('cert-alert');
@@ -42,6 +45,86 @@ const filterState = {
 };
 let activeActionRow = null;
 let activeDataRow = null;
+
+function formatFilterDate(value) {
+  if (!value) return '';
+  const parts = value.split('-');
+  if (parts.length !== 3) return value;
+  const [year, month, day] = parts;
+  return `${day}/${month}/${year}`;
+}
+
+function getTaxTypeLabel(taxTypeId) {
+  if (!taxTypeId) return '';
+  const match = retainedTaxTypes.find(
+    type => String(type.id) === String(taxTypeId)
+  );
+  if (match) {
+    return match.name;
+  }
+  const certMatch = certificates.find(
+    cert =>
+      String(
+        cert.retained_tax_type_id ?? cert.retained_tax_type?.id ?? cert.tax_type?.id
+      ) === String(taxTypeId)
+  );
+  if (certMatch?.tax_type_name) {
+    return certMatch.tax_type_name;
+  }
+  return `#${taxTypeId}`;
+}
+
+function updateFilterSummary() {
+  if (!filterSummary || !filterSummaryItems) return;
+  const chips = [];
+  if (filterState.startDate) {
+    chips.push({ label: 'Desde', value: formatFilterDate(filterState.startDate) });
+  }
+  if (filterState.endDate) {
+    chips.push({ label: 'Hasta', value: formatFilterDate(filterState.endDate) });
+  }
+  if (filterState.taxTypeId) {
+    chips.push({ label: 'Impuesto', value: getTaxTypeLabel(filterState.taxTypeId) });
+  }
+
+  filterSummaryItems.innerHTML = '';
+
+  if (!chips.length) {
+    filterSummary.classList.add('d-none');
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  chips.forEach(chipData => {
+    const chip = document.createElement('span');
+    chip.className = 'filter-summary-chip';
+    const label = document.createElement('span');
+    label.className = 'filter-summary-chip-label';
+    label.textContent = `${chipData.label}:`;
+    const value = document.createElement('span');
+    value.textContent = chipData.value;
+    chip.append(label, value);
+    fragment.appendChild(chip);
+  });
+
+  filterSummaryItems.appendChild(fragment);
+  filterSummary.classList.remove('d-none');
+}
+
+function clearCertificateFilters() {
+  if (filterForm) {
+    filterForm.reset();
+    populateFilterTaxTypeSelect('');
+  }
+  filterState.startDate = '';
+  filterState.endDate = '';
+  filterState.taxTypeId = '';
+  clearFilterError();
+  renderCertificates();
+  if (filterModal) {
+    filterModal.hide();
+  }
+}
 
 function normalizeCertificate(cert) {
   const taxType = cert.retained_tax_type ?? cert.tax_type ?? null;
@@ -315,6 +398,7 @@ function renderCertificates() {
   });
 
   updateTotalDisplay(totalAmount);
+  updateFilterSummary();
 }
 
 function setDateLimits() {
@@ -555,18 +639,14 @@ if (filterForm) {
 
 if (clearFiltersBtn) {
   clearFiltersBtn.addEventListener('click', () => {
-    if (filterForm) {
-      filterForm.reset();
-      populateFilterTaxTypeSelect('');
-    }
-    filterState.startDate = '';
-    filterState.endDate = '';
-    filterState.taxTypeId = '';
-    clearFilterError();
-    renderCertificates();
-    if (filterModal) {
-      filterModal.hide();
-    }
+    clearCertificateFilters();
+  });
+}
+
+if (filterSummaryClear) {
+  filterSummaryClear.addEventListener('click', event => {
+    event.preventDefault();
+    clearCertificateFilters();
   });
 }
 

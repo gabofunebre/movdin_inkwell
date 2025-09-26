@@ -9,6 +9,13 @@
       </div>
       <button id="add-purchase" class="btn action-btn d-inline-flex align-items-center"><i class="bi bi-file-earmark-arrow-down me-1"></i>Compra</button>
     </div>
+    <div id="inv-filter-summary" class="filter-summary alert alert-info d-none" role="status">
+      <div class="filter-summary-content">
+        <span class="filter-summary-label">Filtrado:</span>
+        <div id="inv-filter-summary-items" class="filter-summary-items"></div>
+      </div>
+      <button type="button" class="btn btn-link btn-sm filter-summary-clear" id="inv-filter-summary-clear">Limpiar filtros</button>
+    </div>
     <div id="inv-table-wrapper" class="table-responsive">
       <table id="inv-table" class="table table-striped table-sm mb-0 w-100">
         <colgroup>
