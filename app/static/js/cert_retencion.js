@@ -8,6 +8,7 @@ import {
 import { formatCurrency, showOverlay, hideOverlay } from './ui.js?v=2';
 import { sanitizeDecimalInput, parseDecimal } from './money.js?v=1';
 import { CURRENCY_SYMBOLS } from './constants.js';
+import { createFilterSummaryManager } from './filterSummary.js?v=1';
 
 const table = document.getElementById('cert-table');
 const tbody = table.querySelector('tbody');
@@ -25,6 +26,12 @@ const filterAlert = document.getElementById('filter-alert');
 const filterSummary = document.getElementById('cert-filter-summary');
 const filterSummaryItems = document.getElementById('cert-filter-summary-items');
 const filterSummaryClear = document.getElementById('cert-filter-summary-clear');
+const filterSummaryManager = createFilterSummaryManager({
+  container: filterSummary,
+  itemsContainer: filterSummaryItems,
+  clearButton: filterSummaryClear,
+  onClear: () => clearCertificateFilters()
+});
 const form = document.getElementById('cert-form');
 const modalTitle = document.getElementById('cert-form-title');
 const alertBox = document.getElementById('cert-alert');
@@ -75,7 +82,6 @@ function getTaxTypeLabel(taxTypeId) {
 }
 
 function updateFilterSummary() {
-  if (!filterSummary || !filterSummaryItems) return;
   const chips = [];
   if (filterState.startDate) {
     chips.push({ label: 'Desde', value: formatFilterDate(filterState.startDate) });
@@ -87,28 +93,7 @@ function updateFilterSummary() {
     chips.push({ label: 'Impuesto', value: getTaxTypeLabel(filterState.taxTypeId) });
   }
 
-  filterSummaryItems.innerHTML = '';
-
-  if (!chips.length) {
-    filterSummary.classList.add('d-none');
-    return;
-  }
-
-  const fragment = document.createDocumentFragment();
-  chips.forEach(chipData => {
-    const chip = document.createElement('span');
-    chip.className = 'filter-summary-chip';
-    const label = document.createElement('span');
-    label.className = 'filter-summary-chip-label';
-    label.textContent = `${chipData.label}:`;
-    const value = document.createElement('span');
-    value.textContent = chipData.value;
-    chip.append(label, value);
-    fragment.appendChild(chip);
-  });
-
-  filterSummaryItems.appendChild(fragment);
-  filterSummary.classList.remove('d-none');
+  filterSummaryManager.update(chips);
 }
 
 function clearCertificateFilters() {
@@ -639,13 +624,6 @@ if (filterForm) {
 
 if (clearFiltersBtn) {
   clearFiltersBtn.addEventListener('click', () => {
-    clearCertificateFilters();
-  });
-}
-
-if (filterSummaryClear) {
-  filterSummaryClear.addEventListener('click', event => {
-    event.preventDefault();
     clearCertificateFilters();
   });
 }

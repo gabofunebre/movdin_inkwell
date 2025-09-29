@@ -16,6 +16,7 @@ import {
   hideOverlay,
 } from './ui.js?v=2';
 import { sanitizeDecimalInput, parseDecimal, formatCurrency } from './money.js?v=1';
+import { createFilterSummaryManager } from './filterSummary.js?v=1';
 
 const tbody = document.querySelector('#tx-table tbody');
 const container = document.getElementById('table-container');
@@ -34,6 +35,12 @@ const clearFiltersBtn = document.getElementById('tx-clear-filters');
 const filterSummary = document.getElementById('tx-filter-summary');
 const filterSummaryItems = document.getElementById('tx-filter-summary-items');
 const filterSummaryClear = document.getElementById('tx-filter-summary-clear');
+const filterSummaryManager = createFilterSummaryManager({
+  container: filterSummary,
+  itemsContainer: filterSummaryItems,
+  clearButton: filterSummaryClear,
+  onClear: () => clearTransactionFilters()
+});
 const headers = document.querySelectorAll('#tx-table thead th.sortable');
 const freqCheck = document.getElementById('freq-check');
 const freqSelect = document.getElementById('freq-select');
@@ -100,7 +107,6 @@ function getAccountLabel(accountId) {
 }
 
 function updateFilterSummary() {
-  if (!filterSummary || !filterSummaryItems) return;
   const chips = [];
   if (filterState.startDate) {
     chips.push({ label: 'Desde', value: formatFilterDate(filterState.startDate) });
@@ -112,28 +118,7 @@ function updateFilterSummary() {
     chips.push({ label: 'Cuenta', value: getAccountLabel(filterState.accountId) });
   }
 
-  filterSummaryItems.innerHTML = '';
-
-  if (!chips.length) {
-    filterSummary.classList.add('d-none');
-    return;
-  }
-
-  const fragment = document.createDocumentFragment();
-  chips.forEach(chipData => {
-    const chip = document.createElement('span');
-    chip.className = 'filter-summary-chip';
-    const label = document.createElement('span');
-    label.className = 'filter-summary-chip-label';
-    label.textContent = `${chipData.label}:`;
-    const value = document.createElement('span');
-    value.textContent = chipData.value;
-    chip.append(label, value);
-    fragment.appendChild(chip);
-  });
-
-  filterSummaryItems.appendChild(fragment);
-  filterSummary.classList.remove('d-none');
+  filterSummaryManager.update(chips);
 }
 
 function clearTransactionFilters() {
@@ -312,13 +297,6 @@ if (filterForm) {
 
 if (clearFiltersBtn) {
   clearFiltersBtn.addEventListener('click', () => {
-    clearTransactionFilters();
-  });
-}
-
-if (filterSummaryClear) {
-  filterSummaryClear.addEventListener('click', event => {
-    event.preventDefault();
     clearTransactionFilters();
   });
 }
