@@ -20,6 +20,59 @@ Aplicación web basada en FastAPI para registrar movimientos de dinero y factura
 
 Consulta [USAGE.md](USAGE.md) para una guía más detallada.
 
+## Integración entre aplicaciones
+
+La aplicación expone un endpoint pensado para que otras apps consuman la
+información fiscal consolidada:
+
+- **GET `/facturacion-info`**
+  - **Autenticación:** enviar el encabezado `X-API-Key` con el valor de la
+    variable de entorno `SELF_BILLING_API_KEY`.
+  - **Respuesta:** se devuelve un JSON con dos colecciones: `invoices` con las
+    facturas de la cuenta marcada como "de facturación" y
+    `retention_certificates` con los certificados de retención asociados. Cada
+    elemento incluye todos los datos necesarios para su liquidación (fechas,
+    importes netos, impuestos calculados y números de referencia).
+  - **Ejemplo de respuesta**:
+
+    ```json
+    {
+      "invoices": [
+        {
+          "id": 12,
+          "account_id": 3,
+          "date": "2024-01-15",
+          "description": "Factura de servicios",
+          "amount": "100000.00",
+          "number": "A-0001-00001234",
+          "iva_percent": "21",
+          "iva_amount": "21000.00",
+          "iibb_percent": "3",
+          "iibb_amount": "3630.00",
+          "percepciones": "0.00",
+          "type": "sale"
+        }
+      ],
+      "retention_certificates": [
+        {
+          "id": 5,
+          "number": "RC-00000001",
+          "date": "2024-01-31",
+          "invoice_reference": "A-0001-00001234",
+          "retained_tax_type_id": 2,
+          "amount": "1500.00",
+          "retained_tax_type": {
+            "id": 2,
+            "name": "Retención de IVA"
+          }
+        }
+      ]
+    }
+    ```
+
+  Las otras aplicaciones pueden usar el campo `invoice_reference` de cada
+  certificado para relacionarlo con la factura correspondiente.
+
 ## Cálculos de moneda
 
 - **Saldo de cuentas:** El saldo de cada cuenta se calcula como `saldo_inicial + suma(transacciones)` para la fecha indicada.

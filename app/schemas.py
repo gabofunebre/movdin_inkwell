@@ -108,6 +108,11 @@ class RetentionCertificateOut(RetentionCertificateCreate):
         from_attributes = True
 
 
+class BillingInfoOut(BaseModel):
+    invoices: List[InvoiceOut]
+    retention_certificates: List[RetentionCertificateOut]
+
+
 class RetentionBreakdown(BaseModel):
     name: str
     amount: Decimal
