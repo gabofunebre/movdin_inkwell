@@ -1,6 +1,7 @@
 import { fetchAccounts, fetchInvoices, createInvoice } from './api.js?v=3';
 import { renderInvoice, showOverlay, hideOverlay } from './ui.js?v=2';
 import { sanitizeDecimalInput, parseDecimal, formatCurrency } from './money.js?v=1';
+import { createFilterSummaryManager } from './filterSummary.js?v=1';
 
 const tbody = document.querySelector('#inv-table tbody');
 const container = document.getElementById('table-container');
@@ -18,6 +19,12 @@ const clearFiltersBtn = document.getElementById('inv-clear-filters');
 const filterSummary = document.getElementById('inv-filter-summary');
 const filterSummaryItems = document.getElementById('inv-filter-summary-items');
 const filterSummaryClear = document.getElementById('inv-filter-summary-clear');
+const filterSummaryManager = createFilterSummaryManager({
+  container: filterSummary,
+  itemsContainer: filterSummaryItems,
+  clearButton: filterSummaryClear,
+  onClear: () => clearInvoiceFilters()
+});
 const headers = document.querySelectorAll('#inv-table thead th.sortable');
 const amountInput = form.amount;
 const ivaPercentInput = form.iva_percent;
@@ -139,7 +146,6 @@ function getInvoiceTypeLabel(type) {
 }
 
 function updateFilterSummary() {
-  if (!filterSummary || !filterSummaryItems) return;
   const chips = [];
   if (filterState.startDate) {
     chips.push({ label: 'Desde', value: formatFilterDate(filterState.startDate) });
@@ -151,28 +157,7 @@ function updateFilterSummary() {
     chips.push({ label: 'Tipo', value: getInvoiceTypeLabel(filterState.type) });
   }
 
-  filterSummaryItems.innerHTML = '';
-
-  if (!chips.length) {
-    filterSummary.classList.add('d-none');
-    return;
-  }
-
-  const fragment = document.createDocumentFragment();
-  chips.forEach(chipData => {
-    const chip = document.createElement('span');
-    chip.className = 'filter-summary-chip';
-    const label = document.createElement('span');
-    label.className = 'filter-summary-chip-label';
-    label.textContent = `${chipData.label}:`;
-    const value = document.createElement('span');
-    value.textContent = chipData.value;
-    chip.append(label, value);
-    fragment.appendChild(chip);
-  });
-
-  filterSummaryItems.appendChild(fragment);
-  filterSummary.classList.remove('d-none');
+  filterSummaryManager.update(chips);
 }
 
 function clearInvoiceFilters() {
@@ -491,13 +476,6 @@ if (filterForm) {
 
 if (clearFiltersBtn) {
   clearFiltersBtn.addEventListener('click', () => {
-    clearInvoiceFilters();
-  });
-}
-
-if (filterSummaryClear) {
-  filterSummaryClear.addEventListener('click', event => {
-    event.preventDefault();
     clearInvoiceFilters();
   });
 }
