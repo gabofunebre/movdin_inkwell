@@ -67,8 +67,11 @@ def test_sync_billing_transactions_applies_events_and_acknowledges_checkpoint(mo
             {
                 "changes": [
                     {
+                        "id": 901,
+                        "movement_id": 501,
                         "event": "created",
-                        "transaction": {
+                        "occurred_at": "2024-01-03T10:00:00.000000+00:00",
+                        "payload": {
                             "id": 501,
                             "date": "2024-01-03",
                             "amount": "150.50",
@@ -77,21 +80,32 @@ def test_sync_billing_transactions_applies_events_and_acknowledges_checkpoint(mo
                         },
                     },
                     {
+                        "id": 902,
+                        "movement_id": 600,
                         "event": "updated",
-                        "transaction": {
+                        "occurred_at": "2024-01-03T11:00:00.000000+00:00",
+                        "payload": {
                             "id": 600,
                             "date": "2024-01-02",
                             "amount": "200.00",
                             "description": "Actualizada",
                             "notes": "Modificada",
+                            "previous_description": "Original",
                         },
                     },
                     {
+                        "id": 903,
+                        "movement_id": 700,
                         "event": "deleted",
-                        "transaction": {"id": 700},
+                        "occurred_at": "2024-01-03T12:00:00.000000+00:00",
+                        "payload": {
+                            "id": 700,
+                            "description": "A borrar",
+                            "deleted": True,
+                        },
                     },
                 ],
-                "checkpoint_id": 900,
+                "checkpoint_id": 903,
                 "last_confirmed_id": 850,
                 "has_more": False,
             },
@@ -117,7 +131,7 @@ def test_sync_billing_transactions_applies_events_and_acknowledges_checkpoint(mo
         return DummyResponse(
             200,
             {
-                "last_confirmed_id": 900,
+                "last_change_id": 903,
                 "updated_at": "2024-01-04T10:00:00Z",
             },
         )
@@ -135,6 +149,8 @@ def test_sync_billing_transactions_applies_events_and_acknowledges_checkpoint(mo
         )
         session.add(account)
         session.flush()
+
+        account.billing_last_confirmed_id = 850
 
         session.add_all(
             [
@@ -182,8 +198,8 @@ def test_sync_billing_transactions_applies_events_and_acknowledges_checkpoint(mo
         assert deleted_tx is None
 
         session.refresh(account)
-        assert account.billing_last_checkpoint_id == 900
-        assert account.billing_last_confirmed_id == 900
+        assert account.billing_last_checkpoint_id == 903
+        assert account.billing_last_confirmed_id == 903
         synced_at = account.billing_synced_at
         assert synced_at is not None
         assert synced_at.isoformat().startswith("2024-01-04T10:00:00")
@@ -197,8 +213,8 @@ def test_sync_billing_transactions_applies_events_and_acknowledges_checkpoint(mo
         )
 
     assert dummy_client.calls
-    assert dummy_client.calls[0]["params"] == {"limit": 2}
-    assert ack_calls["json"] == {"checkpoint_id": 900}
+    assert dummy_client.calls[0]["params"] == {"limit": 2, "since": 850}
+    assert ack_calls["json"] == {"checkpoint_id": 903}
     assert ack_calls["url"].endswith("/movimientos_exportables/cambios/ack")
 
 
@@ -212,8 +228,15 @@ def test_sync_billing_transactions_fails_when_deleting_missing_transaction(monke
             {
                 "changes": [
                     {
+                        "id": 910,
+                        "movement_id": 1234,
                         "event": "deleted",
-                        "transaction": {"id": 1234},
+                        "occurred_at": "2024-01-05T08:00:00.000000+00:00",
+                        "payload": {
+                            "id": 1234,
+                            "description": "Desconocido",
+                            "deleted": True,
+                        },
                     }
                 ],
                 "checkpoint_id": 910,
