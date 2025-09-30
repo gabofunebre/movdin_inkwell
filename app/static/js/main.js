@@ -48,7 +48,15 @@ const descInput = document.getElementById('desc-input');
 const amountInput = form.amount;
 const billingSyncButton = document.getElementById('billing-sync-button');
 const billingSyncLabel = document.getElementById('billing-sync-button-label');
-const billingNotificationBadge = document.getElementById('billing-notification-badge');
+const billingNotificationBadgeContainer = document.getElementById('billing-notification-badges');
+
+const BILLING_NOTIFICATION_EVENT_TYPES = ['created', 'updated', 'deleted'];
+const billingNotificationBadges = Object.fromEntries(
+  BILLING_NOTIFICATION_EVENT_TYPES.map(type => [
+    type,
+    billingNotificationBadgeContainer?.querySelector(`[data-type="${type}"]`) || null
+  ])
+);
 
 const BILLING_NOTIFICATION_TYPE = 'movimiento_cta_facturacion_iw';
 const BILLING_NOTIFICATION_PAGE_LIMIT = 100;
@@ -56,7 +64,92 @@ const BILLING_NOTIFICATION_MAX_PAGES = 20;
 const BILLING_NOTIFICATION_REFRESH_INTERVAL_MS = 60000;
 const BILLING_NOTIFICATION_BADGE_MAX = 99;
 
-let billingNotificationState = { ids: [], unreadCount: 0 };
+function createEmptyEventCounts() {
+  return BILLING_NOTIFICATION_EVENT_TYPES.reduce((acc, type) => {
+    acc[type] = 0;
+    return acc;
+  }, {});
+}
+
+function normalizeEventCounts(counts) {
+  const normalized = createEmptyEventCounts();
+  if (!counts || typeof counts !== 'object') {
+    return normalized;
+  }
+  for (const type of BILLING_NOTIFICATION_EVENT_TYPES) {
+    const value = counts[type];
+    normalized[type] = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+  }
+  return normalized;
+}
+
+function getBillingEventSummaryLines(counts) {
+  const normalized = normalizeEventCounts(counts);
+  return [
+    `nuevos registros: ${normalized.created || 0}`,
+    `modificaciones: ${normalized.updated || 0}`,
+    `eliminaciones: ${normalized.deleted || 0}`
+  ];
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, match => {
+    switch (match) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case "'":
+        return '&#39;';
+      default:
+        return match;
+    }
+  });
+}
+
+function pickEventCounts(source) {
+  if (!source || typeof source !== 'object') return null;
+  const counts = createEmptyEventCounts();
+  let hasData = false;
+  for (const type of BILLING_NOTIFICATION_EVENT_TYPES) {
+    if (Object.prototype.hasOwnProperty.call(source, type)) {
+      const value = source[type];
+      counts[type] = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+      hasData = true;
+    }
+  }
+  return hasData ? counts : null;
+}
+
+function extractEventCountsFromPayload(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const candidates = [
+    payload.notification_counts,
+    payload.notifications?.event_counts,
+    payload.notifications?.counts,
+    payload.notifications,
+    payload.event_counts,
+    payload.counts,
+    payload.summary
+  ];
+  for (const candidate of candidates) {
+    const extracted = pickEventCounts(candidate);
+    if (extracted) {
+      return extracted;
+    }
+  }
+  return pickEventCounts(payload);
+}
+
+let billingNotificationState = {
+  ids: [],
+  unreadCount: 0,
+  eventCounts: createEmptyEventCounts()
+};
 let billingNotificationTimer = null;
 
 let billingSyncOriginalLabel = '';
@@ -368,35 +461,52 @@ function showFilterAlert(message) {
   filterAlert.classList.remove('d-none');
 }
 
-function updateBillingNotificationBadge(count) {
-  if (!billingNotificationBadge || !billingSyncButton) return;
-  const numericCount = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
-  const displayValue =
-    numericCount > BILLING_NOTIFICATION_BADGE_MAX
-      ? `${BILLING_NOTIFICATION_BADGE_MAX}+`
-      : String(numericCount);
-  billingSyncButton.setAttribute('data-notification-count', String(numericCount));
-  if (numericCount > 0) {
-    billingNotificationBadge.textContent = displayValue;
-    billingNotificationBadge.classList.remove('d-none');
-  } else {
-    billingNotificationBadge.textContent = '';
-    billingNotificationBadge.classList.add('d-none');
+function updateBillingNotificationBadges(state) {
+  if (!billingNotificationBadgeContainer || !billingSyncButton) return;
+  const counts = normalizeEventCounts(state?.eventCounts);
+  const totalFromCounts = Object.values(counts).reduce((sum, value) => sum + value, 0);
+  const total = Number.isFinite(state?.unreadCount)
+    ? Math.max(totalFromCounts, Math.max(0, Math.trunc(state.unreadCount)))
+    : totalFromCounts;
+  billingSyncButton.setAttribute('data-notification-count', String(total));
+
+  let hasVisibleBadge = false;
+  for (const type of BILLING_NOTIFICATION_EVENT_TYPES) {
+    const badge = billingNotificationBadges[type];
+    if (!badge) continue;
+    const count = counts[type] || 0;
+    if (count > 0) {
+      const displayValue =
+        count > BILLING_NOTIFICATION_BADGE_MAX
+          ? `${BILLING_NOTIFICATION_BADGE_MAX}+`
+          : String(count);
+      badge.textContent = displayValue;
+      badge.classList.remove('d-none');
+      hasVisibleBadge = true;
+    } else {
+      badge.textContent = '';
+      badge.classList.add('d-none');
+    }
   }
+
+  if (hasVisibleBadge) {
+    billingNotificationBadgeContainer.classList.remove('d-none');
+    billingNotificationBadgeContainer.setAttribute('aria-hidden', 'false');
+  } else {
+    billingNotificationBadgeContainer.classList.add('d-none');
+    billingNotificationBadgeContainer.setAttribute('aria-hidden', 'true');
+  }
+
   if (billingSyncOriginalLabel) {
-    const ariaLabel =
-      numericCount > 0
-        ? `${billingSyncOriginalLabel} (${numericCount} pendientes)`
-        : billingSyncOriginalLabel;
+    const summaryLines = getBillingEventSummaryLines(counts);
+    const detailText = summaryLines.join(', ');
+    const ariaLabel = total > 0 ? `${billingSyncOriginalLabel} (${detailText})` : billingSyncOriginalLabel;
     billingSyncButton.setAttribute('aria-label', ariaLabel);
-  }
-  if (numericCount > 0) {
-    billingSyncButton.title =
-      numericCount === 1
-        ? 'Hay 1 movimiento pendiente de sincronizar'
-        : `Hay ${numericCount} movimientos pendientes de sincronizar`;
-  } else {
-    billingSyncButton.removeAttribute('title');
+    if (total > 0) {
+      billingSyncButton.title = `Pendientes de sincronizar — ${summaryLines.join(' · ')}`;
+    } else {
+      billingSyncButton.removeAttribute('title');
+    }
   }
 }
 
@@ -408,7 +518,7 @@ function stopBillingNotificationRefreshTimer() {
 }
 
 function scheduleBillingNotificationRefresh() {
-  if (!billingSyncButton || !billingNotificationBadge) return;
+  if (!billingSyncButton || !billingNotificationBadgeContainer) return;
   stopBillingNotificationRefreshTimer();
   billingNotificationTimer = setTimeout(() => {
     refreshBillingNotificationIndicator().catch(error => {
@@ -420,6 +530,7 @@ function scheduleBillingNotificationRefresh() {
 async function fetchBillingNotificationState() {
   const ids = [];
   let unreadCount = 0;
+  const eventCounts = createEmptyEventCounts();
   let cursor = null;
   let first = true;
   let iterations = 0;
@@ -448,6 +559,13 @@ async function fetchBillingNotificationState() {
       response.items.forEach(item => {
         if (item && item.id) {
           ids.push(item.id);
+          const eventType = item.variables?.event;
+          if (typeof eventType === 'string') {
+            const normalized = eventType.toLowerCase();
+            if (Object.prototype.hasOwnProperty.call(eventCounts, normalized)) {
+              eventCounts[normalized] += 1;
+            }
+          }
         }
       });
     }
@@ -460,22 +578,30 @@ async function fetchBillingNotificationState() {
     cursor = nextCursor;
   }
 
-  return { ids, unreadCount };
+  const totalFromCounts = Object.values(eventCounts).reduce((sum, value) => sum + value, 0);
+  if (!Number.isFinite(unreadCount) || unreadCount < totalFromCounts) {
+    unreadCount = totalFromCounts;
+  }
+
+  return { ids, unreadCount, eventCounts };
 }
 
 async function refreshBillingNotificationIndicator() {
-  if (!billingSyncButton || !billingNotificationBadge) return;
+  if (!billingSyncButton || !billingNotificationBadgeContainer) return;
   stopBillingNotificationRefreshTimer();
   try {
     const state = await fetchBillingNotificationState();
+    const eventCounts = normalizeEventCounts(state.eventCounts);
+    const totalFromCounts = Object.values(eventCounts).reduce((sum, value) => sum + value, 0);
     const count = Number.isFinite(state.unreadCount)
-      ? Math.max(0, state.unreadCount)
-      : state.ids.length;
+      ? Math.max(totalFromCounts, Math.max(0, Math.trunc(state.unreadCount)))
+      : Math.max(totalFromCounts, state.ids.length);
     billingNotificationState = {
       ids: state.ids,
-      unreadCount: count
+      unreadCount: count,
+      eventCounts
     };
-    updateBillingNotificationBadge(count);
+    updateBillingNotificationBadges(billingNotificationState);
   } catch (error) {
     console.error('Error al obtener las notificaciones de facturación', error);
   } finally {
@@ -484,20 +610,23 @@ async function refreshBillingNotificationIndicator() {
 }
 
 async function markBillingNotificationsAsRead() {
-  if (!billingSyncButton || !billingNotificationBadge) return;
+  if (!billingSyncButton || !billingNotificationBadgeContainer) return;
   stopBillingNotificationRefreshTimer();
 
   if (!billingNotificationState.ids.length) {
     try {
       const state = await fetchBillingNotificationState();
+      const eventCounts = normalizeEventCounts(state.eventCounts);
+      const totalFromCounts = Object.values(eventCounts).reduce((sum, value) => sum + value, 0);
       const count = Number.isFinite(state.unreadCount)
-        ? Math.max(0, state.unreadCount)
-        : state.ids.length;
+        ? Math.max(totalFromCounts, Math.max(0, Math.trunc(state.unreadCount)))
+        : Math.max(totalFromCounts, state.ids.length);
       billingNotificationState = {
         ids: state.ids,
-        unreadCount: count
+        unreadCount: count,
+        eventCounts
       };
-      updateBillingNotificationBadge(count);
+      updateBillingNotificationBadges(billingNotificationState);
     } catch (error) {
       console.error('Error al preparar las notificaciones de facturación para confirmar', error);
       scheduleBillingNotificationRefresh();
@@ -506,7 +635,11 @@ async function markBillingNotificationsAsRead() {
   }
 
   if (!billingNotificationState.ids.length) {
-    updateBillingNotificationBadge(0);
+    updateBillingNotificationBadges({
+      ids: [],
+      unreadCount: 0,
+      eventCounts: createEmptyEventCounts()
+    });
     scheduleBillingNotificationRefresh();
     return;
   }
@@ -532,8 +665,12 @@ async function markBillingNotificationsAsRead() {
     return;
   }
 
-  billingNotificationState = { ids: [], unreadCount: 0 };
-  updateBillingNotificationBadge(0);
+  billingNotificationState = {
+    ids: [],
+    unreadCount: 0,
+    eventCounts: createEmptyEventCounts()
+  };
+  updateBillingNotificationBadges(billingNotificationState);
   scheduleBillingNotificationRefresh();
 }
 
@@ -634,8 +771,8 @@ form.addEventListener('submit', async e => {
   frequentMap = Object.fromEntries(frequents.map(f => [f.id, f]));
   await loadMore();
   updateSortIcons();
-  if (billingSyncButton && billingNotificationBadge) {
-    updateBillingNotificationBadge(billingNotificationState.unreadCount);
+  if (billingSyncButton && billingNotificationBadgeContainer) {
+    updateBillingNotificationBadges(billingNotificationState);
     refreshBillingNotificationIndicator();
   }
 })();
@@ -643,19 +780,40 @@ form.addEventListener('submit', async e => {
 if (billingSyncButton) {
   billingSyncButton.addEventListener('click', async () => {
     if (billingSyncButton.disabled) return;
+    const initialSummaryLines = getBillingEventSummaryLines(
+      billingNotificationState.eventCounts
+    );
+    if (typeof showAlertModal === 'function') {
+      try {
+        await showAlertModal(initialSummaryLines.join('\n'), {
+          title: 'Movimientos pendientes',
+          confirmText: 'Continuar',
+          confirmClass: 'btn-primary',
+          defaultValue: true
+        });
+      } catch (error) {
+        console.error('No se pudo mostrar el resumen de pendientes', error);
+      }
+    }
+
     stopBillingNotificationRefreshTimer();
     billingSyncButton.disabled = true;
     const computedStyle = window.getComputedStyle(billingSyncButton);
     const spinnerColor =
       billingSyncButton.style.color || computedStyle.color || '#0d6efd';
+    const spinnerHtml =
+      `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="color:${spinnerColor}"></span>` +
+      'Sincronizando...';
     if (billingSyncLabel) {
-      billingSyncLabel.innerHTML =
-        `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="color:${spinnerColor}"></span>` +
-        'Sincronizando...';
+      billingSyncLabel.innerHTML = spinnerHtml;
     } else {
-      billingSyncButton.innerHTML =
-        `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" style="color:${spinnerColor}"></span>` +
-        'Sincronizando...';
+      billingSyncButton.innerHTML = spinnerHtml;
+      if (
+        billingNotificationBadgeContainer &&
+        !billingSyncButton.contains(billingNotificationBadgeContainer)
+      ) {
+        billingSyncButton.appendChild(billingNotificationBadgeContainer);
+      }
     }
     showOverlay();
     const result = await syncBillingTransactions();
@@ -665,21 +823,50 @@ if (billingSyncButton) {
       billingSyncLabel.textContent = billingSyncOriginalLabel || billingSyncLabel.textContent;
     } else {
       billingSyncButton.textContent = billingSyncOriginalLabel || billingSyncButton.textContent;
-      if (billingNotificationBadge && !billingSyncButton.contains(billingNotificationBadge)) {
-        billingSyncButton.appendChild(billingNotificationBadge);
+      if (
+        billingNotificationBadgeContainer &&
+        !billingSyncButton.contains(billingNotificationBadgeContainer)
+      ) {
+        billingSyncButton.appendChild(billingNotificationBadgeContainer);
       }
     }
-    updateBillingNotificationBadge(billingNotificationState.unreadCount);
+    updateBillingNotificationBadges(billingNotificationState);
     if (result.ok) {
       transactions = [];
       offset = 0;
       await loadMore();
       await markBillingNotificationsAsRead();
       scheduleBillingNotificationRefresh();
-      if (result.data?.message) {
-        showAlertModal(result.data.message, {
-          title: 'Sincronización completada'
-        });
+      const backendData = result.data || null;
+      const backendMessage =
+        (backendData && typeof backendData.message === 'string'
+          ? backendData.message
+          : typeof backendData === 'string'
+          ? backendData
+          : '') || 'Sincronización completada';
+      const backendCounts = extractEventCountsFromPayload(backendData);
+      if (typeof showAlertModal === 'function') {
+        const summaryLines = backendCounts
+          ? getBillingEventSummaryLines(backendCounts)
+          : initialSummaryLines;
+        const summaryHtml = summaryLines
+          .map(line => `<div>${escapeHtml(line)}</div>`)
+          .join('');
+        const escapedMessage = escapeHtml(backendMessage).replace(/\n/g, '<br>');
+        const messageHtmlParts = [];
+        if (backendMessage) {
+          messageHtmlParts.push(`<p class="mb-2">${escapedMessage}</p>`);
+        }
+        if (summaryHtml) {
+          messageHtmlParts.push(`<div>${summaryHtml}</div>`);
+        }
+        const messageHtml = messageHtmlParts.join('');
+        if (messageHtml) {
+          showAlertModal(backendMessage, {
+            title: 'Sincronización completada',
+            html: messageHtml
+          });
+        }
       }
     } else {
       scheduleBillingNotificationRefresh();
