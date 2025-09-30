@@ -108,7 +108,7 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
     headers = {"X-API-Key": api_key}
     page_size = max(1, min(limit or 100, 500))
 
-    since = billing_account.billing_last_checkpoint_id
+    since = billing_account.billing_last_confirmed_id
     (
         remote_changes,
         latest_checkpoint,
@@ -132,7 +132,9 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                     detail="Evento desconocido recibido desde facturación",
                 )
 
-            payload = change.get("transaction")
+            payload = change.get("payload")
+            if payload is None:
+                payload = change.get("transaction")
             if not isinstance(payload, dict):
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
@@ -140,7 +142,7 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                 )
 
             remote_id = _parse_remote_identifier(
-                payload.get("id"), "transaction.id"
+                payload.get("id"), "payload.id"
             )
             if remote_id is None:
                 raise HTTPException(
@@ -209,6 +211,10 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
             if ack_confirmed is None:
                 ack_confirmed = _parse_remote_identifier(
                     ack_data.get("last_transaction_id"), "last_transaction_id"
+                )
+            if ack_confirmed is None:
+                ack_confirmed = _parse_remote_identifier(
+                    ack_data.get("last_change_id"), "last_change_id"
                 )
             if ack_confirmed is not None:
                 billing_account.billing_last_confirmed_id = ack_confirmed
