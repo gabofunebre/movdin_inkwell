@@ -103,77 +103,19 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
             detail="BILLING_API_KEY no está configurado",
         )
 
-    endpoint = _build_billing_endpoint(base_url)
+    changes_url = _build_billing_changes_url(base_url)
+    ack_url = _build_billing_ack_url(base_url)
     headers = {"X-API-Key": api_key}
     page_size = max(1, min(limit or 100, 500))
 
-    transactions_data, last_response = _fetch_billing_transactions(
-        endpoint, headers, page_size
-    )
+    since = billing_account.billing_last_checkpoint_id
+    (
+        remote_changes,
+        latest_checkpoint,
+        last_confirmed,
+    ) = _fetch_billing_changes(changes_url, headers, page_size, since)
 
-    unique_transactions: list[tuple[int, dict]] = []
-    seen_ids: set[int] = set()
-    for item in transactions_data:
-        try:
-            remote_id = int(item["id"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Movimiento recibido sin identificador válido",
-            ) from exc
-        if remote_id in seen_ids:
-            continue
-        seen_ids.add(remote_id)
-        unique_transactions.append((remote_id, item))
-
-    existing_ids: set[int] = set()
-    if seen_ids:
-        existing_ids = {
-            value
-            for value in db.scalars(
-                select(Transaction.billing_transaction_id)
-                .where(Transaction.account_id == billing_account.id)
-                .where(Transaction.billing_transaction_id.in_(seen_ids))
-            ).all()
-            if value is not None
-        }
-
-    new_transactions: list[Transaction] = []
-    skipped = 0
-    for remote_id, item in unique_transactions:
-        if remote_id in existing_ids:
-            skipped += 1
-            continue
-        tx_date = _parse_remote_date(item.get("date"), remote_id)
-        amount = _parse_remote_amount(item.get("amount"), remote_id)
-        description = (item.get("description") or "").strip()
-        notes = item.get("notes") or ""
-        new_transactions.append(
-            Transaction(
-                account_id=billing_account.id,
-                date=tx_date,
-                description=description,
-                amount=amount,
-                notes=notes,
-                billing_transaction_id=remote_id,
-            )
-        )
-
-    latest_checkpoint = _parse_remote_identifier(
-        last_response.get("checkpoint_id"), "checkpoint_id"
-    )
-    last_confirmed = _parse_remote_identifier(
-        last_response.get("last_confirmed_id"), "last_confirmed_id"
-    )
-    confirm_needed = (
-        latest_checkpoint is not None
-        and (
-            last_confirmed is None
-            or latest_checkpoint != last_confirmed
-            or bool(new_transactions)
-            or skipped > 0
-        )
-    )
+    counters = {"created": 0, "updated": 0, "deleted": 0}
 
     now = datetime.now(timezone.utc)
     billing_account.billing_last_checkpoint_id = latest_checkpoint
@@ -182,28 +124,100 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
     billing_account.billing_synced_at = now
 
     try:
-        for tx in new_transactions:
-            db.add(tx)
+        for change in remote_changes:
+            event = (change.get("event") or "").lower()
+            if event not in counters:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Evento desconocido recibido desde facturación",
+                )
 
-        confirm_data = None
-        if confirm_needed:
-            confirm_data = _confirm_billing_checkpoint(
-                endpoint, headers, latest_checkpoint
+            payload = change.get("transaction")
+            if not isinstance(payload, dict):
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Formato de evento inválido desde facturación",
+                )
+
+            remote_id = _parse_remote_identifier(
+                payload.get("id"), "transaction.id"
             )
-            if confirm_data:
-                new_confirmed = _parse_remote_identifier(
-                    confirm_data.get("last_transaction_id"), "last_transaction_id"
+            if remote_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Movimiento recibido sin identificador válido",
                 )
-                if new_confirmed is not None:
-                    billing_account.billing_last_confirmed_id = new_confirmed
-                updated_at = confirm_data.get("updated_at")
-                parsed_updated = (
-                    _parse_remote_timestamp(updated_at) if updated_at else None
-                )
-                if parsed_updated:
-                    billing_account.billing_synced_at = parsed_updated
+
+            existing_tx = db.scalar(
+                select(Transaction)
+                .where(Transaction.account_id == billing_account.id)
+                .where(Transaction.billing_transaction_id == remote_id)
+            )
+
+            if event == "deleted":
+                if not existing_tx:
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail=(
+                            "Se recibió un evento de eliminación para un movimiento"
+                            " inexistente"
+                        ),
+                    )
+                db.delete(existing_tx)
+            else:
+                tx_date = _parse_remote_date(payload.get("date"), remote_id)
+                amount = _parse_remote_amount(payload.get("amount"), remote_id)
+                description = (payload.get("description") or "").strip()
+                notes = payload.get("notes") or ""
+
+                if event == "updated" and not existing_tx:
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail=(
+                            "Se recibió un evento de actualización para un movimiento"
+                            " inexistente"
+                        ),
+                    )
+
+                if existing_tx:
+                    existing_tx.date = tx_date
+                    existing_tx.amount = amount
+                    existing_tx.description = description
+                    existing_tx.notes = notes
+                    db.add(existing_tx)
                 else:
-                    billing_account.billing_synced_at = now
+                    new_tx = Transaction(
+                        account_id=billing_account.id,
+                        date=tx_date,
+                        description=description,
+                        amount=amount,
+                        notes=notes,
+                        billing_transaction_id=remote_id,
+                    )
+                    db.add(new_tx)
+
+            counters[event] += 1
+
+        ack_data = None
+        if latest_checkpoint is not None:
+            ack_data = _acknowledge_billing_checkpoint(
+                ack_url, headers, latest_checkpoint
+            )
+            ack_confirmed = _parse_remote_identifier(
+                ack_data.get("last_confirmed_id"), "last_confirmed_id"
+            )
+            if ack_confirmed is None:
+                ack_confirmed = _parse_remote_identifier(
+                    ack_data.get("last_transaction_id"), "last_transaction_id"
+                )
+            if ack_confirmed is not None:
+                billing_account.billing_last_confirmed_id = ack_confirmed
+            updated_at = ack_data.get("updated_at") if ack_data else None
+            parsed_updated = (
+                _parse_remote_timestamp(updated_at) if updated_at else None
+            )
+            if parsed_updated:
+                billing_account.billing_synced_at = parsed_updated
 
         db.commit()
     except HTTPException:
@@ -216,14 +230,14 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
             detail="No se pudieron guardar los movimientos de facturación",
         ) from exc
 
-    inserted = len(new_transactions)
-    confirmed = confirm_needed
-    message = _build_sync_message(inserted, skipped, confirmed)
+    message = _build_sync_summary(
+        counters["created"], counters["updated"], counters["deleted"]
+    )
 
     return {
-        "inserted": inserted,
-        "skipped": skipped,
-        "fetched": len(unique_transactions),
+        "nuevos": counters["created"],
+        "modificados": counters["updated"],
+        "eliminados": counters["deleted"],
         "checkpoint_id": billing_account.billing_last_checkpoint_id,
         "last_confirmed_id": billing_account.billing_last_confirmed_id,
         "synced_at": billing_account.billing_synced_at.isoformat()
@@ -233,38 +247,56 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
     }
 
 
-def _build_billing_endpoint(base_url: str) -> str:
+def _build_billing_changes_url(base_url: str) -> str:
     trimmed = base_url.rstrip("/")
-    if trimmed.endswith("movimientos_cuenta_facturada"):
-        return trimmed
-    return f"{trimmed}/movimientos_cuenta_facturada"
+    return f"{trimmed}/movimientos_exportables/cambios"
 
 
-def _fetch_billing_transactions(
-    endpoint: str, headers: dict[str, str], limit: int
-) -> tuple[list[dict], dict]:
-    remote_transactions: list[dict] = []
-    last_response: dict | None = None
-    cursor: int | None = None
+def _build_billing_ack_url(base_url: str) -> str:
+    return f"{_build_billing_changes_url(base_url)}/ack"
+
+
+def _fetch_billing_changes(
+    endpoint: str,
+    headers: dict[str, str],
+    limit: int,
+    since: int | None,
+) -> tuple[list[dict], int | None, int | None]:
+    all_changes: list[dict] = []
+    latest_checkpoint: int | None = since
+    last_confirmed: int | None = None
+    cursor = since
     try:
         with httpx.Client(timeout=30.0) as client:
             while True:
                 params = {"limit": limit}
                 if cursor is not None:
-                    params["checkpoint_id"] = cursor
+                    params["since"] = cursor
                 response = client.get(endpoint, params=params, headers=headers)
                 payload = _handle_billing_response(response)
-                last_response = payload
-                transactions = payload.get("transactions") or []
-                if not isinstance(transactions, list):
+                changes = payload.get("changes") or []
+                if not isinstance(changes, list):
                     raise HTTPException(
                         status_code=status.HTTP_502_BAD_GATEWAY,
                         detail="Respuesta inválida del servicio de facturación",
                     )
-                remote_transactions.extend(transactions)
+                all_changes.extend(changes)
+
+                checkpoint_value = _parse_remote_identifier(
+                    payload.get("checkpoint_id"), "checkpoint_id"
+                )
+                if checkpoint_value is not None:
+                    latest_checkpoint = checkpoint_value
+
+                confirmed_value = _parse_remote_identifier(
+                    payload.get("last_confirmed_id"), "last_confirmed_id"
+                )
+                if confirmed_value is not None:
+                    last_confirmed = confirmed_value
+
                 if not payload.get("has_more"):
                     break
-                cursor = payload.get("checkpoint_id")
+                cursor = checkpoint_value
                 if cursor is None:
                     break
     except HTTPException:
@@ -275,13 +307,7 @@ def _fetch_billing_transactions(
             detail="No se pudo conectar con el servicio de facturación",
         ) from exc
 
-    if last_response is None:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Respuesta vacía del servicio de facturación",
-        )
-
-    return remote_transactions, last_response
+    return all_changes, latest_checkpoint, last_confirmed
 
 
 def _handle_billing_response(response: httpx.Response) -> dict:
@@ -328,11 +354,9 @@ def _extract_remote_error(response: httpx.Response) -> str:
     return f"Error del servicio de facturación ({response.status_code})"
 
 
-def _confirm_billing_checkpoint(
-    endpoint: str, headers: dict[str, str], checkpoint_id: int | None
-) -> dict | None:
-    if checkpoint_id is None:
-        return None
+def _acknowledge_billing_checkpoint(
+    endpoint: str, headers: dict[str, str], checkpoint_id: int
+) -> dict:
     try:
         response = httpx.post(
             endpoint,
@@ -419,17 +443,27 @@ def _parse_remote_timestamp(value: object) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _build_sync_message(inserted: int, skipped: int, confirmed: bool) -> str:
-    if inserted:
-        return (
-            "Se incorporó 1 movimiento de facturación."
-            if inserted == 1
-            else f"Se incorporaron {inserted} movimientos de facturación."
+def _build_sync_summary(created: int, updated: int, deleted: int) -> str:
+    if not any((created, updated, deleted)):
+        return "No se registraron cambios de facturación."
+
+    parts: list[str] = []
+    if created:
+        parts.append(
+            "1 movimiento nuevo" if created == 1 else f"{created} movimientos nuevos"
         )
-    if confirmed and skipped:
-        return (
-            "Los movimientos pendientes ya estaban registrados y se confirmó el checkpoint."
+    if updated:
+        parts.append(
+            "1 movimiento modificado"
+            if updated == 1
+            else f"{updated} movimientos modificados"
         )
-    if confirmed:
-        return "Se confirmó el último checkpoint de facturación."
-    return "No hay movimientos nuevos para la cuenta de facturación."
+    if deleted:
+        parts.append(
+            "1 movimiento eliminado"
+            if deleted == 1
+            else f"{deleted} movimientos eliminados"
+        )
+
+    joined = ", ".join(parts)
+    return f"Se sincronizaron {joined}."
