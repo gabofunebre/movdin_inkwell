@@ -36,10 +36,16 @@ class Account(Base):
     color: Mapped[str] = mapped_column(String(7), default="#000000")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_billing: Mapped[bool] = mapped_column(Boolean, default=False)
-    billing_last_checkpoint_id: Mapped[int | None] = mapped_column(
+    billing_last_transactions_checkpoint_id: Mapped[int | None] = mapped_column(
+        "billing_last_checkpoint_id", BigInteger, nullable=True
+    )
+    billing_last_transactions_confirmed_id: Mapped[int | None] = mapped_column(
+        "billing_last_confirmed_id", BigInteger, nullable=True
+    )
+    billing_last_changes_checkpoint_id: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True
     )
-    billing_last_confirmed_id: Mapped[int | None] = mapped_column(
+    billing_last_changes_confirmed_id: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True
     )
     billing_synced_at: Mapped[datetime | None] = mapped_column(
@@ -51,6 +57,22 @@ class Account(Base):
 
     transactions = relationship("Transaction", back_populates="account")
     invoices = relationship("Invoice", back_populates="account")
+
+    @property
+    def billing_last_checkpoint_id(self) -> int | None:
+        return self.billing_last_transactions_checkpoint_id
+
+    @billing_last_checkpoint_id.setter
+    def billing_last_checkpoint_id(self, value: int | None) -> None:
+        self.billing_last_transactions_checkpoint_id = value
+
+    @property
+    def billing_last_confirmed_id(self) -> int | None:
+        return self.billing_last_transactions_confirmed_id
+
+    @billing_last_confirmed_id.setter
+    def billing_last_confirmed_id(self, value: int | None) -> None:
+        self.billing_last_transactions_confirmed_id = value
 
 
 class Transaction(Base):
