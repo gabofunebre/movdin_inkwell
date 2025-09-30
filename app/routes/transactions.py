@@ -17,6 +17,10 @@ from schemas import TransactionCreate, TransactionOut
 router = APIRouter(prefix="/transactions")
 
 
+def _has_non_empty_string(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
 @router.post("", response_model=TransactionOut)
 def create_tx(payload: TransactionCreate, db: Session = Depends(get_db)):
     if payload.date > date.today():
@@ -167,31 +171,74 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                     )
                 db.delete(existing_tx)
             else:
-                missing_date = not payload.get("date")
+                missing_date = not _has_non_empty_string(payload.get("date"))
                 missing_amount = payload.get("amount") is None
-                if missing_date or missing_amount:
+                missing_description = not _has_non_empty_string(payload.get("description"))
+                notes_value = payload.get("notes")
+                missing_notes = not _has_non_empty_string(notes_value)
+
+                detail: dict | None = None
+                if missing_date or missing_amount or missing_description or missing_notes:
                     detail = _fetch_billing_movement_detail(
                         base_url, headers, remote_id
                     )
-                    if missing_date:
-                        detail_date = detail.get("date") if isinstance(detail, dict) else None
-                        if detail_date:
-                            payload["date"] = detail_date
-                        elif existing_tx:
-                            payload["date"] = existing_tx.date.isoformat()
-                    if missing_amount:
-                        detail_amount = (
-                            detail.get("amount") if isinstance(detail, dict) else None
-                        )
-                        if detail_amount is not None:
-                            payload["amount"] = detail_amount
-                        elif existing_tx:
-                            payload["amount"] = str(existing_tx.amount)
+
+                if missing_date:
+                    detail_date = detail.get("date") if isinstance(detail, dict) else None
+                    if _has_non_empty_string(detail_date):
+                        payload["date"] = detail_date
+                    elif existing_tx:
+                        payload["date"] = existing_tx.date.isoformat()
+
+                if missing_amount:
+                    detail_amount = (
+                        detail.get("amount") if isinstance(detail, dict) else None
+                    )
+                    if detail_amount is not None:
+                        payload["amount"] = detail_amount
+                    elif existing_tx:
+                        payload["amount"] = str(existing_tx.amount)
+
+                if missing_description and isinstance(detail, dict):
+                    detail_description = detail.get("description")
+                    if _has_non_empty_string(detail_description):
+                        payload["description"] = detail_description
+
+                if missing_notes and isinstance(detail, dict):
+                    detail_notes = detail.get("notes")
+                    if _has_non_empty_string(detail_notes):
+                        payload["notes"] = detail_notes
+
+                if missing_date and not payload.get("date") and existing_tx:
+                    payload["date"] = existing_tx.date.isoformat()
+                if missing_amount and payload.get("amount") is None and existing_tx:
+                    payload["amount"] = str(existing_tx.amount)
 
                 tx_date = _parse_remote_date(payload.get("date"), remote_id)
                 amount = _parse_remote_amount(payload.get("amount"), remote_id)
-                description = (payload.get("description") or "").strip()
-                notes = payload.get("notes") or ""
+
+                description_source = payload.get("description")
+                if _has_non_empty_string(description_source):
+                    description = description_source.strip()
+                elif existing_tx and existing_tx.description is not None:
+                    description = existing_tx.description
+                else:
+                    description = ""
+
+                notes_source = payload.get("notes")
+                if _has_non_empty_string(notes_source):
+                    notes = notes_source
+                elif (
+                    isinstance(notes_source, str)
+                    and not notes_source.strip()
+                    and existing_tx
+                    and existing_tx.notes is not None
+                ):
+                    notes = existing_tx.notes
+                elif existing_tx and existing_tx.notes is not None:
+                    notes = existing_tx.notes
+                else:
+                    notes = ""
 
                 if event == "updated" and not existing_tx:
                     raise HTTPException(
