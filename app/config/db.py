@@ -221,6 +221,22 @@ def _apply_schema_upgrades() -> None:
                         f"ADD COLUMN billing_last_confirmed_id {col_type}"
                     )
                 )
+            if "billing_last_changes_checkpoint_id" not in columns:
+                col_type = "BIGINT" if engine.dialect.name == "postgresql" else "INTEGER"
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} "
+                        f"ADD COLUMN billing_last_changes_checkpoint_id {col_type}"
+                    )
+                )
+            if "billing_last_changes_confirmed_id" not in columns:
+                col_type = "BIGINT" if engine.dialect.name == "postgresql" else "INTEGER"
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} "
+                        f"ADD COLUMN billing_last_changes_confirmed_id {col_type}"
+                    )
+                )
             if "billing_synced_at" not in columns:
                 if engine.dialect.name == "postgresql":
                     conn.execute(
