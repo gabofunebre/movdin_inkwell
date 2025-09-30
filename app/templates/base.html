@@ -21,7 +21,11 @@
         class="btn ms-3"
         style="--bs-btn-color: {{ billing_account.color }}; --bs-btn-border-color: {{ billing_account.color }}; --bs-btn-hover-color: {{ billing_account.color }}; --bs-btn-hover-border-color: {{ billing_account.color }}; --bs-btn-hover-bg: rgba(255,255,255,0.15); border-color: {{ billing_account.color }}; color: {{ billing_account.color }}; background-color: transparent;">
         <span id="billing-sync-button-label" class="billing-sync-button-label">Traer movimientos para: {{ billing_account.name }}</span>
-        <span id="billing-notification-badge" class="notification-badge d-none" aria-hidden="true"></span>
+        <span id="billing-notification-badges" class="notification-badges d-none" aria-hidden="true">
+          <span class="notification-badge d-none" data-type="created"></span>
+          <span class="notification-badge d-none" data-type="updated"></span>
+          <span class="notification-badge d-none" data-type="deleted"></span>
+        </span>
       </button>
       {% endif %}
     </div>

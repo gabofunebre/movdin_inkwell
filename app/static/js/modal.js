@@ -11,6 +11,7 @@
   function openModal({
     title = 'Aviso',
     message = '',
+    html = null,
     confirmText = 'Aceptar',
     cancelText = 'Cancelar',
     showCancel = false,
@@ -18,7 +19,23 @@
     defaultValue = true
   }) {
     titleElement.textContent = title;
-    bodyElement.textContent = message;
+    if (html !== null && html !== undefined) {
+      bodyElement.innerHTML = html;
+    } else {
+      const text = message === null || message === undefined ? '' : String(message);
+      if (text.includes('\n')) {
+        bodyElement.textContent = '';
+        const lines = text.split('\n');
+        lines.forEach((line, index) => {
+          bodyElement.appendChild(document.createTextNode(line));
+          if (index < lines.length - 1) {
+            bodyElement.appendChild(document.createElement('br'));
+          }
+        });
+      } else {
+        bodyElement.textContent = text;
+      }
+    }
     primaryButton.textContent = confirmText;
     primaryButton.classList.remove('btn-primary', 'btn-danger', 'btn-success', 'btn-warning');
     primaryButton.classList.add(confirmClass);
@@ -69,11 +86,13 @@
       title = 'Aviso',
       confirmText = 'Aceptar',
       confirmClass = 'btn-primary',
-      defaultValue = true
+      defaultValue = true,
+      html = null
     } = options;
     return openModal({
       title,
       message,
+      html,
       confirmText,
       confirmClass,
       showCancel: false,
@@ -87,11 +106,13 @@
       confirmText = 'Aceptar',
       cancelText = 'Cancelar',
       confirmClass = 'btn-danger',
-      defaultValue = false
+      defaultValue = false,
+      html = null
     } = options;
     return openModal({
       title,
       message,
+      html,
       confirmText,
       cancelText,
       confirmClass,
