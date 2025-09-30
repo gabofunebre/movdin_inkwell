@@ -418,6 +418,131 @@ def test_sync_billing_transactions_uses_detail_notes_and_preserves_existing(monk
     assert detail_calls[1]["url"].endswith("/movimientos_cuenta_facturada/800")
     assert detail_calls[2]["url"].endswith("/movimientos_cuenta_facturada/801")
 
+def test_sync_billing_transactions_uses_detail_notes_and_preserves_existing(monkeypatch):
+    os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api"
+    os.environ["BILLING_API_KEY"] = "secret"
+
+    responses = [
+        (
+            200,
+            {
+                "changes": [
+                    {
+                        "id": 920,
+                        "movement_id": 800,
+                        "event": "created",
+                        "occurred_at": "2024-03-10T09:00:00.000000+00:00",
+                        "payload": {
+                            "id": 800,
+                            "date": "2024-03-10",
+                            "amount": "45.67",
+                            "description": "Generado sin notas",
+                        },
+                    },
+                    {
+                        "id": 921,
+                        "movement_id": 801,
+                        "event": "updated",
+                        "occurred_at": "2024-03-10T10:00:00.000000+00:00",
+                        "payload": {
+                            "id": 801,
+                            "date": "2024-03-09",
+                            "amount": "89.10",
+                            "description": "Cambio sin notas",
+                        },
+                    },
+                ],
+                "checkpoint_id": 921,
+                "last_confirmed_id": 910,
+                "has_more": False,
+            },
+        )
+    ]
+
+    dummy_client = DummyHttpxClient(responses)
+    monkeypatch.setattr(httpx, "Client", lambda *_args, **_kwargs: dummy_client)
+
+    detail_calls: list[dict] = []
+
+    def fake_get(url, headers=None, timeout=None):
+        detail_calls.append({"url": url, "headers": headers, "timeout": timeout})
+        if url.endswith("/800"):
+            return DummyResponse(
+                200,
+                {
+                    "transaction": {
+                        "id": 800,
+                        "date": "2024-03-10",
+                        "amount": "45.67",
+                        "description": "Generado sin notas",
+                        "notes": "Notas del detalle",
+                    }
+                },
+            )
+        if url.endswith("/801"):
+            return DummyResponse(
+                200,
+                {
+                    "transaction": {
+                        "id": 801,
+                        "date": "2024-03-09",
+                        "amount": "89.10",
+                        "description": "Cambio sin notas",
+                    }
+                },
+            )
+        raise AssertionError("detalle inesperado")
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: DummyResponse(200, {"last_change_id": 921}))
+
+    with db.SessionLocal() as session:
+        account = Account(
+            name="Cuenta facturación",
+            opening_balance=Decimal("0"),
+            currency=Currency.ARS,
+            color="#000000",
+            is_active=True,
+            is_billing=True,
+        )
+        session.add(account)
+        session.flush()
+
+        session.add(
+            Transaction(
+                account_id=account.id,
+                date=date(2024, 3, 1),
+                description="Previo",
+                amount=Decimal("89.10"),
+                notes="Notas previas",
+                billing_transaction_id=801,
+            )
+        )
+        session.commit()
+
+        result = sync_billing_transactions(limit=5, db=session)
+
+        created_tx = session.scalar(
+            select(Transaction).where(Transaction.billing_transaction_id == 800)
+        )
+        assert created_tx is not None
+        assert created_tx.notes == "Notas del detalle"
+        assert created_tx.description == "Generado sin notas"
+
+        updated_tx = session.scalar(
+            select(Transaction).where(Transaction.billing_transaction_id == 801)
+        )
+        assert updated_tx is not None
+        assert updated_tx.description == "Cambio sin notas"
+        assert updated_tx.notes == "Notas previas"
+
+        assert result["nuevos"] == 1
+        assert result["modificados"] == 1
+
+    assert len(detail_calls) == 2
+    assert detail_calls[0]["headers"] == {"X-API-Key": "secret"}
+    assert detail_calls[1]["headers"] == {"X-API-Key": "secret"}
+
 def test_sync_billing_transactions_fails_when_deleting_missing_transaction(monkeypatch):
     os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api"
     os.environ["BILLING_API_KEY"] = "secret"
