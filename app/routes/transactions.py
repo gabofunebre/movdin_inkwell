@@ -167,6 +167,27 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                     )
                 db.delete(existing_tx)
             else:
+                missing_date = not payload.get("date")
+                missing_amount = payload.get("amount") is None
+                if missing_date or missing_amount:
+                    detail = _fetch_billing_movement_detail(
+                        base_url, headers, remote_id
+                    )
+                    if missing_date:
+                        detail_date = detail.get("date") if isinstance(detail, dict) else None
+                        if detail_date:
+                            payload["date"] = detail_date
+                        elif existing_tx:
+                            payload["date"] = existing_tx.date.isoformat()
+                    if missing_amount:
+                        detail_amount = (
+                            detail.get("amount") if isinstance(detail, dict) else None
+                        )
+                        if detail_amount is not None:
+                            payload["amount"] = detail_amount
+                        elif existing_tx:
+                            payload["amount"] = str(existing_tx.amount)
+
                 tx_date = _parse_remote_date(payload.get("date"), remote_id)
                 amount = _parse_remote_amount(payload.get("amount"), remote_id)
                 description = (payload.get("description") or "").strip()
@@ -260,6 +281,11 @@ def _build_billing_changes_url(base_url: str) -> str:
 
 def _build_billing_ack_url(base_url: str) -> str:
     return f"{_build_billing_changes_url(base_url)}/ack"
+
+
+def _build_billing_detail_url(base_url: str, movement_id: int) -> str:
+    trimmed = base_url.rstrip("/")
+    return f"{trimmed}/movimientos_exportables/{movement_id}"
 
 
 def _fetch_billing_changes(
@@ -376,6 +402,25 @@ def _acknowledge_billing_checkpoint(
             detail="No se pudo confirmar el checkpoint de facturación",
         ) from exc
     return _handle_billing_response(response)
+
+
+def _fetch_billing_movement_detail(
+    base_url: str, headers: dict[str, str], movement_id: int
+) -> dict:
+    endpoint = _build_billing_detail_url(base_url, movement_id)
+    try:
+        response = httpx.get(endpoint, headers=headers, timeout=30.0)
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="No se pudo obtener el detalle del movimiento de facturación",
+        ) from exc
+
+    payload = _handle_billing_response(response)
+    detail = payload.get("transaction") if isinstance(payload, dict) else None
+    if isinstance(detail, dict):
+        return detail
+    return payload
 
 
 def _parse_remote_date(value: object, remote_id: int) -> date:
