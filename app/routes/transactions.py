@@ -359,8 +359,7 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
 
 
 def _build_billing_feed_url(base_url: str) -> str:
-    trimmed = base_url.rstrip("/")
-    return f"{trimmed}/movimientos_cuenta_facturada"
+    return base_url.rstrip("/")
 
 
 def _build_billing_ack_url(base_url: str) -> str:
@@ -369,8 +368,7 @@ def _build_billing_ack_url(base_url: str) -> str:
 
 def _build_billing_detail_url(base_url: str, movement_id: int) -> str:
     trimmed = base_url.rstrip("/")
-    return f"{trimmed}/movimientos_cuenta_facturada/{movement_id}"
-
+    return f"{trimmed}/{movement_id}"
 
 def _fetch_billing_feed(
     endpoint: str,

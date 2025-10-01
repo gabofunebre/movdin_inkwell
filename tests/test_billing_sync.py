@@ -52,7 +52,8 @@ def test_sync_billing_transactions_applies_events_and_acknowledges_checkpoint(mo
             "timeout": timeout,
         })
         assert headers == {"X-API-Key": "secret"}
-        assert url.endswith("/movimientos_cuenta_facturada")
+        expected_feed_url = os.environ["FACTURACION_RUTA_DATA"].rstrip("/")
+        assert url == expected_feed_url
         assert params == {"limit": 2, "changes_limit": 2, "changes_since": 850}
         return DummyResponse(
             200,
@@ -110,6 +111,8 @@ def test_sync_billing_transactions_applies_events_and_acknowledges_checkpoint(mo
             "headers": headers,
             "timeout": timeout,
         })
+        expected_feed_url = os.environ["FACTURACION_RUTA_DATA"].rstrip("/")
+        assert url == expected_feed_url
         return DummyResponse(
             200,
             {
@@ -205,7 +208,9 @@ def test_sync_billing_transactions_applies_events_and_acknowledges_checkpoint(mo
         "movements_checkpoint_id": 903,
         "changes_checkpoint_id": 905,
     }
-    assert ack_calls["url"].endswith("/movimientos_cuenta_facturada")
+    
+    expected_feed_url = os.environ["FACTURACION_RUTA_DATA"].rstrip("/")
+    assert ack_calls["url"] == expected_feed_url
 
 
 def test_sync_billing_transactions_fetches_missing_fields(monkeypatch):
@@ -216,7 +221,8 @@ def test_sync_billing_transactions_fetches_missing_fields(monkeypatch):
 
     def fake_get(url, params=None, headers=None, timeout=None):
         assert headers == {"X-API-Key": "secret"}
-        if url.endswith("/movimientos_cuenta_facturada"):
+        expected_feed_url = os.environ["FACTURACION_RUTA_DATA"].rstrip("/")
+        if url == expected_feed_url:
             detail_calls.append({"url": url, "params": params, "headers": headers})
             return DummyResponse(
                 200,
@@ -287,16 +293,137 @@ def test_sync_billing_transactions_fetches_missing_fields(monkeypatch):
         session.refresh(account)
         assert account.billing_last_transactions_checkpoint_id == 905
         assert account.billing_last_transactions_confirmed_id == 905
-
     assert len(detail_calls) == 2
     feed_call = detail_calls[0]
-    assert feed_call["url"].endswith("/movimientos_cuenta_facturada")
+    expected_feed_url = os.environ["FACTURACION_RUTA_DATA"].rstrip("/")
+    assert feed_call["url"] == expected_feed_url
     assert feed_call["params"] == {"limit": 10, "changes_limit": 10}
     assert feed_call["headers"] == {"X-API-Key": "secret"}
     detail_call = detail_calls[1]
-    assert detail_call["url"].endswith("/movimientos_cuenta_facturada/501")
+    assert detail_call["url"] == f"{expected_feed_url}/501"
     assert detail_call["headers"] == {"X-API-Key": "secret"}
 
+
+def test_sync_billing_transactions_uses_detail_notes_and_preserves_existing(monkeypatch):
+    os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api"
+    os.environ["BILLING_API_KEY"] = "secret"
+
+    detail_calls: list[dict] = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert headers == {"X-API-Key": "secret"}
+        expected_feed_url = os.environ["FACTURACION_RUTA_DATA"].rstrip("/")
+        if url == expected_feed_url:
+            detail_calls.append({"url": url, "params": params, "headers": headers})
+            return DummyResponse(
+                200,
+                {
+                    "transactions": [
+                        {
+                            "id": 800,
+                            "date": "2024-03-10",
+                            "amount": "45.67",
+                            "description": "Generado sin notas",
+                        }
+                    ],
+                    "transactions_checkpoint_id": 921,
+                    "last_confirmed_transaction_id": 910,
+                    "changes": [
+                        {
+                            "id": 921,
+                            "movement_id": 801,
+                            "event": "updated",
+                            "payload": {
+                                "id": 801,
+                                "date": "2024-03-09",
+                                "amount": "89.10",
+                                "description": "Cambio sin notas",
+                            },
+                        }
+                    ],
+                    "changes_checkpoint_id": 921,
+                    "last_confirmed_change_id": 910,
+                },
+            )
+        detail_calls.append({"url": url, "headers": headers, "timeout": timeout})
+        if url == f"{expected_feed_url}/800":
+            return DummyResponse(
+                200,
+                {
+                    "transaction": {
+                        "id": 800,
+                        "date": "2024-03-10",
+                        "amount": "45.67",
+                        "description": "Generado sin notas",
+                        "notes": "Notas del detalle",
+                    }
+                },
+            )
+        if url == f"{expected_feed_url}/801":
+            return DummyResponse(
+                200,
+                {
+                    "transaction": {
+                        "id": 801,
+                        "date": "2024-03-09",
+                        "amount": "89.10",
+                        "description": "Cambio sin notas",
+                    }
+                },
+            )
+        raise AssertionError("detalle inesperado")
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: DummyResponse(200, {"last_change_id": 921}))
+
+    with db.SessionLocal() as session:
+        account = Account(
+            name="Cuenta facturación",
+            opening_balance=Decimal("0"),
+            currency=Currency.ARS,
+            color="#000000",
+            is_active=True,
+            is_billing=True,
+        )
+        session.add(account)
+        session.flush()
+
+        session.add(
+            Transaction(
+                account_id=account.id,
+                date=date(2024, 3, 1),
+                description="Previo",
+                amount=Decimal("89.10"),
+                notes="Notas previas",
+                billing_transaction_id=801,
+            )
+        )
+        session.commit()
+
+        result = sync_billing_transactions(limit=5, db=session)
+
+        created_tx = session.scalar(
+            select(Transaction).where(Transaction.billing_transaction_id == 800)
+        )
+        assert created_tx is not None
+        assert created_tx.notes == "Notas del detalle"
+        assert created_tx.description == "Generado sin notas"
+
+        updated_tx = session.scalar(
+            select(Transaction).where(Transaction.billing_transaction_id == 801)
+        )
+        assert updated_tx is not None
+        assert updated_tx.description == "Cambio sin notas"
+        assert updated_tx.notes == "Notas previas"
+        assert result["nuevos"] == 1
+        assert result["modificados"] == 1
+
+    assert len(detail_calls) == 3
+    expected_feed_url = os.environ["FACTURACION_RUTA_DATA"].rstrip("/")
+    assert detail_calls[0]["url"] == expected_feed_url
+    assert detail_calls[0]["params"] == {"limit": 5, "changes_limit": 5}
+    assert detail_calls[1]["url"] == f"{expected_feed_url}/800"
+    assert detail_calls[2]["url"] == f"{expected_feed_url}/801"
 
 def test_sync_billing_transactions_uses_detail_notes_and_preserves_existing(monkeypatch):
     os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api"
@@ -422,10 +549,16 @@ def test_sync_billing_transactions_uses_detail_notes_and_preserves_existing(monk
     os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api"
     os.environ["BILLING_API_KEY"] = "secret"
 
-    responses = [
-        (
+    def fake_get(url, params=None, headers=None, timeout=None):
+        expected_feed_url = os.environ["FACTURACION_RUTA_DATA"].rstrip("/")
+        assert url == expected_feed_url
+        assert headers == {"X-API-Key": "secret"}
+        return DummyResponse(
             200,
             {
+                "transactions": [],
+                "transactions_checkpoint_id": 910,
+                "last_confirmed_transaction_id": 900,
                 "changes": [
                     {
                         "id": 920,
