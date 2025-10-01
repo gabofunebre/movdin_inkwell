@@ -132,13 +132,10 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
     counters = {"created": 0, "updated": 0, "deleted": 0}
 
     now = datetime.now(timezone.utc)
-    billing_account.billing_last_transactions_checkpoint_id = transactions_checkpoint
     if transactions_confirmed is not None:
         billing_account.billing_last_transactions_confirmed_id = transactions_confirmed
-    billing_account.billing_last_changes_checkpoint_id = changes_checkpoint
     if changes_confirmed is not None:
         billing_account.billing_last_changes_confirmed_id = changes_confirmed
-    billing_account.billing_synced_at = now
 
     try:
         for change in transaction_events:
@@ -252,7 +249,7 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
             detail="No se pudieron guardar los movimientos de facturación",
         ) from exc
 
-    ack_data = None
+    ack_data: dict = {}
     pending_transactions_checkpoint = transactions_checkpoint
     pending_changes_checkpoint = changes_checkpoint
 
@@ -267,36 +264,57 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
             pending_changes_checkpoint,
         )
 
+    last_transaction = None
+    last_change = None
     if ack_data:
         last_transaction = _parse_remote_identifier(
             ack_data.get("last_transaction_id"), "last_transaction_id"
         )
-        if last_transaction is not None:
-            billing_account.billing_last_transactions_confirmed_id = last_transaction
         last_change = _parse_remote_identifier(
             ack_data.get("last_change_id"), "last_change_id"
         )
-        if last_change is not None:
-            billing_account.billing_last_changes_confirmed_id = last_change
-        timestamps = [
-            _parse_remote_timestamp(ack_data.get("transactions_updated_at")),
-            _parse_remote_timestamp(ack_data.get("changes_updated_at")),
-        ]
-        parsed_updates = [ts for ts in timestamps if ts is not None]
-        if parsed_updates:
-            billing_account.billing_synced_at = max(parsed_updates)
 
-        try:
-            db.commit()
-        except HTTPException:
-            db.rollback()
-            raise
-        except Exception as exc:  # pragma: no cover - defensive
-            db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="No se pudieron guardar la confirmación de facturación",
-            ) from exc
+    if last_transaction is None:
+        last_transaction = transactions_confirmed
+    if last_change is None:
+        last_change = changes_confirmed
+
+    timestamps = []
+    if ack_data:
+        timestamps.extend(
+            [
+                _parse_remote_timestamp(ack_data.get("transactions_updated_at")),
+                _parse_remote_timestamp(ack_data.get("changes_updated_at")),
+            ]
+        )
+    parsed_updates = [ts for ts in timestamps if ts is not None]
+    if parsed_updates:
+        billing_account.billing_synced_at = max(parsed_updates)
+    else:
+        billing_account.billing_synced_at = now
+
+    if pending_transactions_checkpoint is not None:
+        billing_account.billing_last_transactions_checkpoint_id = (
+            pending_transactions_checkpoint
+        )
+    if last_transaction is not None:
+        billing_account.billing_last_transactions_confirmed_id = last_transaction
+    if pending_changes_checkpoint is not None:
+        billing_account.billing_last_changes_checkpoint_id = pending_changes_checkpoint
+    if last_change is not None:
+        billing_account.billing_last_changes_confirmed_id = last_change
+
+    try:
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:  # pragma: no cover - defensive
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No se pudieron guardar la confirmación de facturación",
+        ) from exc
 
     message = _build_sync_summary(
         counters["created"], counters["updated"], counters["deleted"]

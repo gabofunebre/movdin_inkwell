@@ -339,6 +339,80 @@ def test_sync_billing_transactions_does_not_ack_when_commit_fails(monkeypatch):
         assert account.billing_last_changes_confirmed_id is None
 
 
+def test_sync_billing_transactions_keeps_events_when_ack_fails(monkeypatch):
+    os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
+    os.environ["BILLING_API_KEY"] = "secret"
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert headers == {"X-API-Key": "secret"}
+        return DummyResponse(
+            200,
+            {
+                "transactions": [],
+                "transaction_events": [
+                    _build_transaction_event(
+                        "created",
+                        2001,
+                        {
+                            "id": 2001,
+                            "date": "2024-05-02",
+                            "amount": "120.00",
+                            "description": "Nuevo movimiento",
+                            "notes": "",
+                        },
+                    )
+                ],
+                "transactions_checkpoint_id": 2001,
+                "last_confirmed_transaction_id": 1500,
+                "changes": [],
+                "changes_checkpoint_id": None,
+                "last_confirmed_change_id": None,
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    def failing_ack(*_args, **_kwargs):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="ack failed",
+        )
+
+    monkeypatch.setattr(
+        transactions_module,
+        "_acknowledge_billing_checkpoint",
+        failing_ack,
+    )
+
+    with db.SessionLocal() as session:
+        account = Account(
+            name="Cuenta facturación",
+            opening_balance=Decimal("0"),
+            currency=Currency.ARS,
+            color="#000000",
+            is_active=True,
+            is_billing=True,
+        )
+        session.add(account)
+        session.commit()
+
+        with pytest.raises(HTTPException) as exc_info:
+            sync_billing_transactions(limit=1, db=session)
+
+        assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
+
+        stored_tx = session.scalar(
+            select(Transaction).where(Transaction.billing_transaction_id == 2001)
+        )
+        assert stored_tx is not None
+
+        session.refresh(account)
+        assert account.billing_last_transactions_checkpoint_id is None
+        assert account.billing_last_transactions_confirmed_id == 1500
+        assert account.billing_last_changes_checkpoint_id is None
+        assert account.billing_last_changes_confirmed_id is None
+
+
 def test_sync_billing_transactions_preserves_existing_notes_when_missing(monkeypatch):
     os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
     os.environ["BILLING_API_KEY"] = "secret"
