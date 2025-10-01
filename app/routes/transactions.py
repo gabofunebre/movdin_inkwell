@@ -137,6 +137,8 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
     if changes_confirmed is not None:
         billing_account.billing_last_changes_confirmed_id = changes_confirmed
 
+    staged_transactions: dict[int, Transaction] = {}
+
     try:
         for change in transaction_events:
             if not isinstance(change, dict):
@@ -164,11 +166,15 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                     detail="Movimiento recibido sin identificador válido",
                 )
 
-            existing_tx = db.scalar(
-                select(Transaction)
-                .where(Transaction.account_id == billing_account.id)
-                .where(Transaction.billing_transaction_id == remote_id)
-            )
+            existing_tx = staged_transactions.get(remote_id)
+            if existing_tx is None:
+                existing_tx = db.scalar(
+                    select(Transaction)
+                    .where(Transaction.account_id == billing_account.id)
+                    .where(Transaction.billing_transaction_id == remote_id)
+                )
+                if existing_tx is not None:
+                    staged_transactions[remote_id] = existing_tx
 
             if event == "deleted":
                 if not existing_tx:
@@ -180,6 +186,7 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                         ),
                     )
                 db.delete(existing_tx)
+                staged_transactions.pop(remote_id, None)
             else:
                 if not isinstance(payload, dict):
                     raise HTTPException(
@@ -227,6 +234,7 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                         billing_transaction_id=remote_id,
                     )
                     db.add(new_tx)
+                    staged_transactions[remote_id] = new_tx
 
             counters[event] += 1
 
