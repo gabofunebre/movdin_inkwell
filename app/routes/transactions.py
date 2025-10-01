@@ -17,6 +17,10 @@ from schemas import TransactionCreate, TransactionOut
 router = APIRouter(prefix="/transactions")
 
 
+def _has_non_empty_string(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
 @router.post("", response_model=TransactionOut)
 def create_tx(payload: TransactionCreate, db: Session = Depends(get_db)):
     if payload.date > date.today():
@@ -103,28 +107,52 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
             detail="BILLING_API_KEY no está configurado",
         )
 
-    changes_url = _build_billing_changes_url(base_url)
+    feed_url = _build_billing_feed_url(base_url)
     ack_url = _build_billing_ack_url(base_url)
     headers = {"X-API-Key": api_key}
-    page_size = max(1, min(limit or 100, 500))
+    transactions_limit = max(1, min(limit or 100, 500))
+    changes_limit = transactions_limit
+    changes_since = billing_account.billing_last_changes_confirmed_id
 
-    since = billing_account.billing_last_confirmed_id
     (
+        remote_transactions,
         remote_changes,
-        latest_checkpoint,
-        last_confirmed,
-    ) = _fetch_billing_changes(changes_url, headers, page_size, since)
+        transactions_checkpoint,
+        transactions_confirmed,
+        changes_checkpoint,
+        changes_confirmed,
+    ) = _fetch_billing_feed(
+        feed_url,
+        headers,
+        transactions_limit,
+        changes_limit,
+        changes_since,
+    )
 
     counters = {"created": 0, "updated": 0, "deleted": 0}
 
     now = datetime.now(timezone.utc)
-    billing_account.billing_last_checkpoint_id = latest_checkpoint
-    if last_confirmed is not None:
-        billing_account.billing_last_confirmed_id = last_confirmed
+    billing_account.billing_last_transactions_checkpoint_id = transactions_checkpoint
+    if transactions_confirmed is not None:
+        billing_account.billing_last_transactions_confirmed_id = transactions_confirmed
+    billing_account.billing_last_changes_checkpoint_id = changes_checkpoint
+    if changes_confirmed is not None:
+        billing_account.billing_last_changes_confirmed_id = changes_confirmed
     billing_account.billing_synced_at = now
 
     try:
-        for change in remote_changes:
+        combined_changes: list[dict] = []
+        for tx_data in remote_transactions:
+            if not isinstance(tx_data, dict):
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Transacción inválida recibida desde facturación",
+                )
+            combined_changes.append({"event": "created", "payload": tx_data})
+
+        combined_changes.extend(remote_changes)
+
+        for change in combined_changes:
             event = (change.get("event") or "").lower()
             if event not in counters:
                 raise HTTPException(
@@ -144,6 +172,10 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
             remote_id = _parse_remote_identifier(
                 payload.get("id"), "payload.id"
             )
+            if remote_id is None:
+                remote_id = _parse_remote_identifier(
+                    change.get("movement_id"), "movement_id"
+                )
             if remote_id is None:
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
@@ -167,31 +199,74 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                     )
                 db.delete(existing_tx)
             else:
-                missing_date = not payload.get("date")
+                missing_date = not _has_non_empty_string(payload.get("date"))
                 missing_amount = payload.get("amount") is None
-                if missing_date or missing_amount:
+                missing_description = not _has_non_empty_string(payload.get("description"))
+                notes_value = payload.get("notes")
+                missing_notes = not _has_non_empty_string(notes_value)
+
+                detail: dict | None = None
+                if missing_date or missing_amount or missing_description or missing_notes:
                     detail = _fetch_billing_movement_detail(
                         base_url, headers, remote_id
                     )
-                    if missing_date:
-                        detail_date = detail.get("date") if isinstance(detail, dict) else None
-                        if detail_date:
-                            payload["date"] = detail_date
-                        elif existing_tx:
-                            payload["date"] = existing_tx.date.isoformat()
-                    if missing_amount:
-                        detail_amount = (
-                            detail.get("amount") if isinstance(detail, dict) else None
-                        )
-                        if detail_amount is not None:
-                            payload["amount"] = detail_amount
-                        elif existing_tx:
-                            payload["amount"] = str(existing_tx.amount)
+
+                if missing_date:
+                    detail_date = detail.get("date") if isinstance(detail, dict) else None
+                    if _has_non_empty_string(detail_date):
+                        payload["date"] = detail_date
+                    elif existing_tx:
+                        payload["date"] = existing_tx.date.isoformat()
+
+                if missing_amount:
+                    detail_amount = (
+                        detail.get("amount") if isinstance(detail, dict) else None
+                    )
+                    if detail_amount is not None:
+                        payload["amount"] = detail_amount
+                    elif existing_tx:
+                        payload["amount"] = str(existing_tx.amount)
+
+                if missing_description and isinstance(detail, dict):
+                    detail_description = detail.get("description")
+                    if _has_non_empty_string(detail_description):
+                        payload["description"] = detail_description
+
+                if missing_notes and isinstance(detail, dict):
+                    detail_notes = detail.get("notes")
+                    if _has_non_empty_string(detail_notes):
+                        payload["notes"] = detail_notes
+
+                if missing_date and not payload.get("date") and existing_tx:
+                    payload["date"] = existing_tx.date.isoformat()
+                if missing_amount and payload.get("amount") is None and existing_tx:
+                    payload["amount"] = str(existing_tx.amount)
 
                 tx_date = _parse_remote_date(payload.get("date"), remote_id)
                 amount = _parse_remote_amount(payload.get("amount"), remote_id)
-                description = (payload.get("description") or "").strip()
-                notes = payload.get("notes") or ""
+
+                description_source = payload.get("description")
+                if _has_non_empty_string(description_source):
+                    description = description_source.strip()
+                elif existing_tx and existing_tx.description is not None:
+                    description = existing_tx.description
+                else:
+                    description = ""
+
+                notes_source = payload.get("notes")
+                if _has_non_empty_string(notes_source):
+                    notes = notes_source
+                elif (
+                    isinstance(notes_source, str)
+                    and not notes_source.strip()
+                    and existing_tx
+                    and existing_tx.notes is not None
+                ):
+                    notes = existing_tx.notes
+                elif existing_tx and existing_tx.notes is not None:
+                    notes = existing_tx.notes
+                else:
+                    notes = ""
 
                 if event == "updated" and not existing_tx:
                     raise HTTPException(
@@ -222,29 +297,33 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
             counters[event] += 1
 
         ack_data = None
-        if latest_checkpoint is not None:
+        if transactions_checkpoint is not None or changes_checkpoint is not None:
             ack_data = _acknowledge_billing_checkpoint(
-                ack_url, headers, latest_checkpoint
+                ack_url,
+                headers,
+                transactions_checkpoint,
+                changes_checkpoint,
             )
-            ack_confirmed = _parse_remote_identifier(
-                ack_data.get("last_confirmed_id"), "last_confirmed_id"
-            )
-            if ack_confirmed is None:
-                ack_confirmed = _parse_remote_identifier(
+            if ack_data:
+                last_transaction = _parse_remote_identifier(
                     ack_data.get("last_transaction_id"), "last_transaction_id"
                 )
-            if ack_confirmed is None:
-                ack_confirmed = _parse_remote_identifier(
+                if last_transaction is not None:
+                    billing_account.billing_last_transactions_confirmed_id = (
+                        last_transaction
+                    )
+                last_change = _parse_remote_identifier(
                     ack_data.get("last_change_id"), "last_change_id"
                 )
-            if ack_confirmed is not None:
-                billing_account.billing_last_confirmed_id = ack_confirmed
-            updated_at = ack_data.get("updated_at") if ack_data else None
-            parsed_updated = (
-                _parse_remote_timestamp(updated_at) if updated_at else None
-            )
-            if parsed_updated:
-                billing_account.billing_synced_at = parsed_updated
+                if last_change is not None:
+                    billing_account.billing_last_changes_confirmed_id = last_change
+                timestamps = [
+                    _parse_remote_timestamp(ack_data.get("transactions_updated_at")),
+                    _parse_remote_timestamp(ack_data.get("changes_updated_at")),
+                ]
+                parsed_updates = [ts for ts in timestamps if ts is not None]
+                if parsed_updates:
+                    billing_account.billing_synced_at = max(parsed_updates)
 
         db.commit()
     except HTTPException:
@@ -261,76 +340,64 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
         counters["created"], counters["updated"], counters["deleted"]
     )
 
-    return {
+    response_payload = {
         "nuevos": counters["created"],
         "modificados": counters["updated"],
         "eliminados": counters["deleted"],
-        "checkpoint_id": billing_account.billing_last_checkpoint_id,
-        "last_confirmed_id": billing_account.billing_last_confirmed_id,
+        "transactions_checkpoint_id": billing_account.billing_last_transactions_checkpoint_id,
+        "transactions_confirmed_id": billing_account.billing_last_transactions_confirmed_id,
+        "changes_checkpoint_id": billing_account.billing_last_changes_checkpoint_id,
+        "changes_confirmed_id": billing_account.billing_last_changes_confirmed_id,
         "synced_at": billing_account.billing_synced_at.isoformat()
         if billing_account.billing_synced_at
         else None,
         "message": message,
     }
+    response_payload["checkpoint_id"] = response_payload["transactions_checkpoint_id"]
+    response_payload["last_confirmed_id"] = response_payload["transactions_confirmed_id"]
+    return response_payload
 
 
-def _build_billing_changes_url(base_url: str) -> str:
-    trimmed = base_url.rstrip("/")
-    return f"{trimmed}/movimientos_exportables/cambios"
+def _build_billing_feed_url(base_url: str) -> str:
+    return base_url.rstrip("/")
 
 
 def _build_billing_ack_url(base_url: str) -> str:
-    return f"{_build_billing_changes_url(base_url)}/ack"
+    return _build_billing_feed_url(base_url)
 
 
 def _build_billing_detail_url(base_url: str, movement_id: int) -> str:
     trimmed = base_url.rstrip("/")
-    return f"{trimmed}/movimientos_exportables/{movement_id}"
+    return f"{trimmed}/{movement_id}"
 
 
-def _fetch_billing_changes(
+def _fetch_billing_feed(
     endpoint: str,
     headers: dict[str, str],
-    limit: int,
-    since: int | None,
-) -> tuple[list[dict], int | None, int | None]:
-    all_changes: list[dict] = []
-    latest_checkpoint: int | None = since
-    last_confirmed: int | None = None
-    cursor = since
+    transactions_limit: int,
+    changes_limit: int,
+    changes_since: int | None,
+) -> tuple[
+    list[dict],
+    list[dict],
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+]:
+    params: dict[str, object] = {
+        "limit": transactions_limit,
+        "changes_limit": changes_limit,
+    }
+    if changes_since is not None:
+        params["changes_since"] = changes_since
     try:
-        with httpx.Client(timeout=30.0) as client:
-            while True:
-                params = {"limit": limit}
-                if cursor is not None:
-                    params["since"] = cursor
-                response = client.get(endpoint, params=params, headers=headers)
-                payload = _handle_billing_response(response)
-                changes = payload.get("changes") or []
-                if not isinstance(changes, list):
-                    raise HTTPException(
-                        status_code=status.HTTP_502_BAD_GATEWAY,
-                        detail="Respuesta inválida del servicio de facturación",
-                    )
-                all_changes.extend(changes)
-
-                checkpoint_value = _parse_remote_identifier(
-                    payload.get("checkpoint_id"), "checkpoint_id"
-                )
-                if checkpoint_value is not None:
-                    latest_checkpoint = checkpoint_value
-
-                confirmed_value = _parse_remote_identifier(
-                    payload.get("last_confirmed_id"), "last_confirmed_id"
-                )
-                if confirmed_value is not None:
-                    last_confirmed = confirmed_value
-
-                if not payload.get("has_more"):
-                    break
-                cursor = checkpoint_value
-                if cursor is None:
-                    break
+        response = httpx.get(
+            endpoint,
+            params=params,
+            headers=headers,
+            timeout=30.0,
+        )
     except HTTPException:
         raise
     except httpx.RequestError as exc:
@@ -339,7 +406,43 @@ def _fetch_billing_changes(
             detail="No se pudo conectar con el servicio de facturación",
         ) from exc
 
-    return all_changes, latest_checkpoint, last_confirmed
+    payload = _handle_billing_response(response)
+
+    transactions = payload.get("transactions") or []
+    if not isinstance(transactions, list):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Respuesta inválida del servicio de facturación",
+        )
+
+    changes = payload.get("changes") or []
+    if not isinstance(changes, list):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Respuesta inválida del servicio de facturación",
+        )
+
+    transactions_checkpoint = _parse_remote_identifier(
+        payload.get("transactions_checkpoint_id"), "transactions_checkpoint_id"
+    )
+    transactions_confirmed = _parse_remote_identifier(
+        payload.get("last_confirmed_transaction_id"), "last_confirmed_transaction_id"
+    )
+    changes_checkpoint = _parse_remote_identifier(
+        payload.get("changes_checkpoint_id"), "changes_checkpoint_id"
+    )
+    changes_confirmed = _parse_remote_identifier(
+        payload.get("last_confirmed_change_id"), "last_confirmed_change_id"
+    )
+
+    return (
+        transactions,
+        changes,
+        transactions_checkpoint,
+        transactions_confirmed,
+        changes_checkpoint,
+        changes_confirmed,
+    )
 
 
 def _handle_billing_response(response: httpx.Response) -> dict:
@@ -387,12 +490,22 @@ def _extract_remote_error(response: httpx.Response) -> str:
 
 
 def _acknowledge_billing_checkpoint(
-    endpoint: str, headers: dict[str, str], checkpoint_id: int
+    endpoint: str,
+    headers: dict[str, str],
+    transactions_checkpoint: int | None,
+    changes_checkpoint: int | None,
 ) -> dict:
+    payload: dict[str, int] = {}
+    if transactions_checkpoint is not None:
+        payload["movements_checkpoint_id"] = transactions_checkpoint
+    if changes_checkpoint is not None:
+        payload["changes_checkpoint_id"] = changes_checkpoint
+    if not payload:
+        return {}
     try:
         response = httpx.post(
             endpoint,
-            json={"checkpoint_id": checkpoint_id},
+            json=payload,
             headers=headers,
             timeout=30.0,
         )
