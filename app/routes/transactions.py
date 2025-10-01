@@ -115,7 +115,7 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
     changes_since = billing_account.billing_last_changes_confirmed_id
 
     (
-        remote_transactions,
+        transaction_events,
         remote_changes,
         transactions_checkpoint,
         transactions_confirmed,
@@ -141,18 +141,13 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
     billing_account.billing_synced_at = now
 
     try:
-        combined_changes: list[dict] = []
-        for tx_data in remote_transactions:
-            if not isinstance(tx_data, dict):
+        for change in transaction_events:
+            if not isinstance(change, dict):
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Transacción inválida recibida desde facturación",
+                    detail="Evento inválido recibido desde facturación",
                 )
-            combined_changes.append({"event": "created", "payload": tx_data})
 
-        combined_changes.extend(remote_changes)
-
-        for change in combined_changes:
             event = (change.get("event") or "").lower()
             if event not in counters:
                 raise HTTPException(
@@ -160,22 +155,12 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                     detail="Evento desconocido recibido desde facturación",
                 )
 
-            payload = change.get("payload")
-            if payload is None:
-                payload = change.get("transaction")
-            if not isinstance(payload, dict):
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Formato de evento inválido desde facturación",
-                )
-
+            payload = change.get("transaction")
             remote_id = _parse_remote_identifier(
-                payload.get("id"), "payload.id"
+                change.get("transaction_id"), "transaction_id"
             )
-            if remote_id is None:
-                remote_id = _parse_remote_identifier(
-                    change.get("movement_id"), "movement_id"
-                )
+            if remote_id is None and isinstance(payload, dict):
+                remote_id = _parse_remote_identifier(payload.get("id"), "transaction.id")
             if remote_id is None:
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
@@ -199,48 +184,11 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                     )
                 db.delete(existing_tx)
             else:
-                missing_date = not _has_non_empty_string(payload.get("date"))
-                missing_amount = payload.get("amount") is None
-                missing_description = not _has_non_empty_string(payload.get("description"))
-                notes_value = payload.get("notes")
-                missing_notes = not _has_non_empty_string(notes_value)
-
-                detail: dict | None = None
-                if missing_date or missing_amount or missing_description or missing_notes:
-                    detail = _fetch_billing_movement_detail(
-                        base_url, headers, remote_id
+                if not isinstance(payload, dict):
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="Formato de evento inválido desde facturación",
                     )
-
-                if missing_date:
-                    detail_date = detail.get("date") if isinstance(detail, dict) else None
-                    if _has_non_empty_string(detail_date):
-                        payload["date"] = detail_date
-                    elif existing_tx:
-                        payload["date"] = existing_tx.date.isoformat()
-
-                if missing_amount:
-                    detail_amount = (
-                        detail.get("amount") if isinstance(detail, dict) else None
-                    )
-                    if detail_amount is not None:
-                        payload["amount"] = detail_amount
-                    elif existing_tx:
-                        payload["amount"] = str(existing_tx.amount)
-
-                if missing_description and isinstance(detail, dict):
-                    detail_description = detail.get("description")
-                    if _has_non_empty_string(detail_description):
-                        payload["description"] = detail_description
-
-                if missing_notes and isinstance(detail, dict):
-                    detail_notes = detail.get("notes")
-                    if _has_non_empty_string(detail_notes):
-                        payload["notes"] = detail_notes
-
-                if missing_date and not payload.get("date") and existing_tx:
-                    payload["date"] = existing_tx.date.isoformat()
-                if missing_amount and payload.get("amount") is None and existing_tx:
-                    payload["amount"] = str(existing_tx.amount)
 
                 tx_date = _parse_remote_date(payload.get("date"), remote_id)
                 amount = _parse_remote_amount(payload.get("amount"), remote_id)
@@ -251,31 +199,20 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                 elif existing_tx and existing_tx.description is not None:
                     description = existing_tx.description
                 else:
-                    description = ""
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail=(
+                            "Descripción faltante para el movimiento recibido"
+                        ),
+                    )
 
                 notes_source = payload.get("notes")
                 if _has_non_empty_string(notes_source):
                     notes = notes_source
-                elif (
-                    isinstance(notes_source, str)
-                    and not notes_source.strip()
-                    and existing_tx
-                    and existing_tx.notes is not None
-                ):
-                    notes = existing_tx.notes
                 elif existing_tx and existing_tx.notes is not None:
                     notes = existing_tx.notes
                 else:
                     notes = ""
-
-                if event == "updated" and not existing_tx:
-                    raise HTTPException(
-                        status_code=status.HTTP_502_BAD_GATEWAY,
-                        detail=(
-                            "Se recibió un evento de actualización para un movimiento"
-                            " inexistente"
-                        ),
-                    )
 
                 if existing_tx:
                     existing_tx.date = tx_date
@@ -295,6 +232,14 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                     db.add(new_tx)
 
             counters[event] += 1
+
+        # Procesamos los cambios de exportación sólo para confirmar checkpoints
+        for change in remote_changes:
+            if not isinstance(change, dict):
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Cambio inválido recibido desde facturación",
+                )
 
         ack_data = None
         if transactions_checkpoint is not None or changes_checkpoint is not None:
@@ -366,10 +311,6 @@ def _build_billing_ack_url(base_url: str) -> str:
     return _build_billing_feed_url(base_url)
 
 
-def _build_billing_detail_url(base_url: str, movement_id: int) -> str:
-    trimmed = base_url.rstrip("/")
-    return f"{trimmed}/{movement_id}"
-
 def _fetch_billing_feed(
     endpoint: str,
     headers: dict[str, str],
@@ -414,12 +355,40 @@ def _fetch_billing_feed(
             detail="Respuesta inválida del servicio de facturación",
         )
 
+    transaction_events = payload.get("transaction_events") or []
+    if not isinstance(transaction_events, list):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Respuesta inválida del servicio de facturación",
+        )
+
     changes = payload.get("changes") or []
     if not isinstance(changes, list):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Respuesta inválida del servicio de facturación",
         )
+
+    snapshots_by_id: dict[int, dict] = {}
+    for snapshot in transactions:
+        if not isinstance(snapshot, dict):
+            continue
+        snapshot_id = _parse_remote_identifier(
+            snapshot.get("id"), "transactions[].id"
+        )
+        if snapshot_id is not None:
+            snapshots_by_id[snapshot_id] = snapshot
+
+    for event in transaction_events:
+        if not isinstance(event, dict):
+            continue
+        event_id = _parse_remote_identifier(
+            event.get("transaction_id"), "transaction_events[].transaction_id"
+        )
+        if event_id is not None and event.get("transaction") is None:
+            snapshot = snapshots_by_id.get(event_id)
+            if snapshot is not None:
+                event["transaction"] = snapshot
 
     transactions_checkpoint = _parse_remote_identifier(
         payload.get("transactions_checkpoint_id"), "transactions_checkpoint_id"
@@ -435,7 +404,7 @@ def _fetch_billing_feed(
     )
 
     return (
-        transactions,
+        transaction_events,
         changes,
         transactions_checkpoint,
         transactions_confirmed,
@@ -514,27 +483,6 @@ def _acknowledge_billing_checkpoint(
             detail="No se pudo confirmar el checkpoint de facturación",
         ) from exc
     return _handle_billing_response(response)
-
-
-def _fetch_billing_movement_detail(
-    base_url: str, headers: dict[str, str], movement_id: int
-) -> dict:
-    endpoint = _build_billing_detail_url(base_url, movement_id)
-    try:
-        response = httpx.get(endpoint, headers=headers, timeout=30.0)
-    except httpx.RequestError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="No se pudo obtener el detalle del movimiento de facturación",
-        ) from exc
-
-    payload = _handle_billing_response(response)
-    detail = payload.get("transaction") if isinstance(payload, dict) else None
-    if isinstance(detail, dict):
-        return detail
-    return payload
-
-
 def _parse_remote_date(value: object, remote_id: int) -> date:
     if not value:
         raise HTTPException(
