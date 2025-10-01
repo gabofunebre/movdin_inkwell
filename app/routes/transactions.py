@@ -370,7 +370,6 @@ def _build_billing_detail_url(base_url: str, movement_id: int) -> str:
     trimmed = base_url.rstrip("/")
     return f"{trimmed}/{movement_id}"
 
-
 def _fetch_billing_feed(
     endpoint: str,
     headers: dict[str, str],
