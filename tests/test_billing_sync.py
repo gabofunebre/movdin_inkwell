@@ -249,6 +249,78 @@ def test_sync_billing_transactions_applies_events_and_acknowledges_checkpoint(mo
     }
 
 
+def test_sync_billing_transactions_handles_created_then_updated_in_same_batch(monkeypatch):
+    os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
+    os.environ["BILLING_API_KEY"] = "secret"
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert headers == {"X-API-Key": "secret"}
+        return DummyResponse(
+            200,
+            {
+                "transactions": [],
+                "transaction_events": [
+                    _build_transaction_event(
+                        "created",
+                        3000,
+                        {
+                            "id": 3000,
+                            "date": "2024-06-01",
+                            "amount": "75.00",
+                            "description": "Movimiento creado",
+                            "notes": "Inicial",
+                        },
+                    ),
+                    _build_transaction_event(
+                        "updated",
+                        3000,
+                        {
+                            "id": 3000,
+                            "date": "2024-06-02",
+                            "amount": "80.00",
+                            "description": "Movimiento actualizado",
+                            "notes": "Actualizado",
+                        },
+                    ),
+                ],
+                "transactions_checkpoint_id": None,
+                "last_confirmed_transaction_id": None,
+                "changes": [],
+                "changes_checkpoint_id": None,
+                "last_confirmed_change_id": None,
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: DummyResponse(200, {}))
+
+    with db.SessionLocal() as session:
+        account = Account(
+            name="Cuenta facturación",
+            opening_balance=Decimal("0"),
+            currency=Currency.ARS,
+            color="#000000",
+            is_active=True,
+            is_billing=True,
+        )
+        session.add(account)
+        session.commit()
+
+        result = sync_billing_transactions(limit=2, db=session)
+
+        stored_tx = session.scalar(
+            select(Transaction).where(Transaction.billing_transaction_id == 3000)
+        )
+        assert stored_tx is not None
+        assert stored_tx.date == date(2024, 6, 2)
+        assert stored_tx.amount == Decimal("80.00")
+        assert stored_tx.description == "Movimiento actualizado"
+        assert stored_tx.notes == "Actualizado"
+
+        assert result["nuevos"] == 1
+        assert result["modificados"] == 1
+
+
 def test_sync_billing_transactions_does_not_ack_when_commit_fails(monkeypatch):
     os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
     os.environ["BILLING_API_KEY"] = "secret"
