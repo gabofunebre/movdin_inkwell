@@ -20,6 +20,7 @@ import httpx  # noqa: E402
 from config import db  # noqa: E402
 from config.constants import Currency  # noqa: E402
 from models import Account, Transaction  # noqa: E402
+from routes import transactions as transactions_module  # noqa: E402
 from routes.transactions import sync_billing_transactions  # noqa: E402
 
 
@@ -246,6 +247,96 @@ def test_sync_billing_transactions_applies_events_and_acknowledges_checkpoint(mo
         "movements_checkpoint_id": 903,
         "changes_checkpoint_id": 905,
     }
+
+
+def test_sync_billing_transactions_does_not_ack_when_commit_fails(monkeypatch):
+    os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
+    os.environ["BILLING_API_KEY"] = "secret"
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert headers == {"X-API-Key": "secret"}
+        return DummyResponse(
+            200,
+            {
+                "transactions": [
+                    {
+                        "id": 1001,
+                        "date": "2024-05-01",
+                        "amount": "10.00",
+                        "description": "Nuevo",
+                        "notes": "",
+                    }
+                ],
+                "transaction_events": [
+                    _build_transaction_event(
+                        "created",
+                        1001,
+                        {
+                            "id": 1001,
+                            "date": "2024-05-01",
+                            "amount": "10.00",
+                            "description": "Nuevo",
+                            "notes": "",
+                        },
+                    )
+                ],
+                "transactions_checkpoint_id": 1001,
+                "last_confirmed_transaction_id": None,
+                "changes": [],
+                "changes_checkpoint_id": None,
+                "last_confirmed_change_id": None,
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    ack_called = False
+
+    def fake_ack(*args, **kwargs):
+        nonlocal ack_called
+        ack_called = True
+        return {}
+
+    monkeypatch.setattr(
+        transactions_module,
+        "_acknowledge_billing_checkpoint",
+        fake_ack,
+    )
+
+    with db.SessionLocal() as session:
+        account = Account(
+            name="Cuenta facturación",
+            opening_balance=Decimal("0"),
+            currency=Currency.ARS,
+            color="#000000",
+            is_active=True,
+            is_billing=True,
+        )
+        session.add(account)
+        session.commit()
+
+        original_commit = session.commit
+
+        def failing_commit():
+            from sqlalchemy.exc import IntegrityError
+
+            raise IntegrityError("SYNC", {}, Exception("fail"))
+
+        monkeypatch.setattr(session, "commit", failing_commit)
+
+        with pytest.raises(HTTPException) as exc_info:
+            sync_billing_transactions(limit=1, db=session)
+
+        assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert not ack_called
+
+        monkeypatch.setattr(session, "commit", original_commit)
+
+        session.refresh(account)
+        assert account.billing_last_transactions_checkpoint_id is None
+        assert account.billing_last_transactions_confirmed_id is None
+        assert account.billing_last_changes_checkpoint_id is None
+        assert account.billing_last_changes_confirmed_id is None
 
 
 def test_sync_billing_transactions_preserves_existing_notes_when_missing(monkeypatch):

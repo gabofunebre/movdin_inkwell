@@ -241,35 +241,6 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                     detail="Cambio inválido recibido desde facturación",
                 )
 
-        ack_data = None
-        if transactions_checkpoint is not None or changes_checkpoint is not None:
-            ack_data = _acknowledge_billing_checkpoint(
-                ack_url,
-                headers,
-                transactions_checkpoint,
-                changes_checkpoint,
-            )
-            if ack_data:
-                last_transaction = _parse_remote_identifier(
-                    ack_data.get("last_transaction_id"), "last_transaction_id"
-                )
-                if last_transaction is not None:
-                    billing_account.billing_last_transactions_confirmed_id = (
-                        last_transaction
-                    )
-                last_change = _parse_remote_identifier(
-                    ack_data.get("last_change_id"), "last_change_id"
-                )
-                if last_change is not None:
-                    billing_account.billing_last_changes_confirmed_id = last_change
-                timestamps = [
-                    _parse_remote_timestamp(ack_data.get("transactions_updated_at")),
-                    _parse_remote_timestamp(ack_data.get("changes_updated_at")),
-                ]
-                parsed_updates = [ts for ts in timestamps if ts is not None]
-                if parsed_updates:
-                    billing_account.billing_synced_at = max(parsed_updates)
-
         db.commit()
     except HTTPException:
         db.rollback()
@@ -280,6 +251,52 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="No se pudieron guardar los movimientos de facturación",
         ) from exc
+
+    ack_data = None
+    pending_transactions_checkpoint = transactions_checkpoint
+    pending_changes_checkpoint = changes_checkpoint
+
+    if (
+        pending_transactions_checkpoint is not None
+        or pending_changes_checkpoint is not None
+    ):
+        ack_data = _acknowledge_billing_checkpoint(
+            ack_url,
+            headers,
+            pending_transactions_checkpoint,
+            pending_changes_checkpoint,
+        )
+
+    if ack_data:
+        last_transaction = _parse_remote_identifier(
+            ack_data.get("last_transaction_id"), "last_transaction_id"
+        )
+        if last_transaction is not None:
+            billing_account.billing_last_transactions_confirmed_id = last_transaction
+        last_change = _parse_remote_identifier(
+            ack_data.get("last_change_id"), "last_change_id"
+        )
+        if last_change is not None:
+            billing_account.billing_last_changes_confirmed_id = last_change
+        timestamps = [
+            _parse_remote_timestamp(ack_data.get("transactions_updated_at")),
+            _parse_remote_timestamp(ack_data.get("changes_updated_at")),
+        ]
+        parsed_updates = [ts for ts in timestamps if ts is not None]
+        if parsed_updates:
+            billing_account.billing_synced_at = max(parsed_updates)
+
+        try:
+            db.commit()
+        except HTTPException:
+            db.rollback()
+            raise
+        except Exception as exc:  # pragma: no cover - defensive
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="No se pudieron guardar la confirmación de facturación",
+            ) from exc
 
     message = _build_sync_summary(
         counters["created"], counters["updated"], counters["deleted"]
