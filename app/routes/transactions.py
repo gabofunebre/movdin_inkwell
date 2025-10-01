@@ -6,7 +6,7 @@ from typing import List
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import select, inspect
 from sqlalchemy.orm import Session
 
 from config.db import get_db
@@ -185,7 +185,11 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                             " inexistente"
                         ),
                     )
-                db.delete(existing_tx)
+                tx_state = inspect(existing_tx)
+                if tx_state.pending:
+                    db.expunge(existing_tx)
+                else:
+                    db.delete(existing_tx)
                 staged_transactions.pop(remote_id, None)
             else:
                 if not isinstance(payload, dict):
