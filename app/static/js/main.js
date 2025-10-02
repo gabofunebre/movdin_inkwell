@@ -71,14 +71,174 @@ function createEmptyEventCounts() {
   }, {});
 }
 
+function parseEventTimestamp(value) {
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isFinite(time) ? time : null;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+    const parsed = Date.parse(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function extractNotificationTimestamp(item) {
+  const candidates = [
+    item?.created_at,
+    item?.occurred_at,
+    item?.updated_at,
+    item?.read_at,
+    item?.sent_at,
+    item?.createdAt,
+    item?.occurredAt,
+    item?.updatedAt,
+    item?.variables?.created_at,
+    item?.variables?.occurred_at,
+    item?.variables?.updated_at,
+    item?.variables?.timestamp,
+    item?.variables?.fecha,
+    item?.variables?.date
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseEventTimestamp(candidate);
+    if (parsed !== null) {
+      return { timestamp: parsed, raw: candidate ?? null };
+    }
+  }
+  return { timestamp: null, raw: null };
+}
+
+function extractMovementIdFromNotification(item) {
+  if (!item || typeof item !== 'object') return null;
+  const variables = item.variables;
+  if (!variables || typeof variables !== 'object') return null;
+
+  if (variables.movement && typeof variables.movement === 'object') {
+    const candidate = variables.movement.id ?? variables.movement.movement_id;
+    if (candidate !== undefined && candidate !== null && candidate !== '') {
+      return String(candidate);
+    }
+  }
+
+  if (variables.movimiento && typeof variables.movimiento === 'object') {
+    const candidate =
+      variables.movimiento.id ??
+      variables.movimiento.id_movimiento ??
+      variables.movimiento.movimiento_id;
+    if (candidate !== undefined && candidate !== null && candidate !== '') {
+      return String(candidate);
+    }
+  }
+
+  const candidateKeys = [
+    'id_movimiento',
+    'movimiento_id',
+    'movement_id',
+    'movementId',
+    'movimientoId',
+    'id',
+    'transaction_id',
+    'billing_transaction_id'
+  ];
+  for (const key of candidateKeys) {
+    if (Object.prototype.hasOwnProperty.call(variables, key)) {
+      const value = variables[key];
+      if (value !== undefined && value !== null && value !== '') {
+        const stringValue = typeof value === 'string' ? value.trim() : String(value);
+        if (stringValue) {
+          return stringValue;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function computeNetMovementEvent(events) {
+  if (!Array.isArray(events) || !events.length) return null;
+  let hasCreated = false;
+  let lastCreatedIndex = -1;
+  let lastDeletedIndex = -1;
+  let lastMeaningfulType = null;
+  let hasUpdatedWithoutCreate = false;
+
+  events.forEach((event, index) => {
+    const type = event?.type;
+    if (!type || !BILLING_NOTIFICATION_EVENT_TYPES.includes(type)) {
+      return;
+    }
+    if (type === 'created') {
+      hasCreated = true;
+      lastCreatedIndex = index;
+      lastMeaningfulType = 'created';
+    } else if (type === 'deleted') {
+      lastDeletedIndex = index;
+      lastMeaningfulType = 'deleted';
+    } else if (type === 'updated') {
+      if (!hasCreated) {
+        hasUpdatedWithoutCreate = true;
+        lastMeaningfulType = 'updated';
+      }
+    }
+  });
+
+  if (hasCreated && lastDeletedIndex > lastCreatedIndex) {
+    return null;
+  }
+  if (hasCreated) {
+    return 'created';
+  }
+  if (lastMeaningfulType === 'deleted') {
+    return 'deleted';
+  }
+  if (hasUpdatedWithoutCreate && lastMeaningfulType === 'updated') {
+    return 'updated';
+  }
+  return null;
+}
+
 function normalizeEventCounts(counts) {
   const normalized = createEmptyEventCounts();
   if (!counts || typeof counts !== 'object') {
     return normalized;
   }
+
+  let hasNumericValues = false;
   for (const type of BILLING_NOTIFICATION_EVENT_TYPES) {
+    if (!Object.prototype.hasOwnProperty.call(counts, type)) continue;
     const value = counts[type];
-    normalized[type] = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+    if (Number.isFinite(value)) {
+      normalized[type] = Math.max(0, Math.trunc(value));
+      hasNumericValues = true;
+    }
+  }
+  if (hasNumericValues) {
+    return normalized;
+  }
+
+  const values = Array.isArray(counts) ? counts : Object.values(counts);
+  for (const value of values) {
+    const type =
+      typeof value === 'string'
+        ? value
+        : typeof value?.type === 'string'
+        ? value.type
+        : typeof value?.netEvent === 'string'
+        ? value.netEvent
+        : null;
+    if (type && Object.prototype.hasOwnProperty.call(normalized, type)) {
+      normalized[type] += 1;
+    }
   }
   return normalized;
 }
@@ -86,9 +246,9 @@ function normalizeEventCounts(counts) {
 function getBillingEventSummaryLines(counts) {
   const normalized = normalizeEventCounts(counts);
   return [
-    `nuevos registros: ${normalized.created || 0}`,
-    `modificaciones: ${normalized.updated || 0}`,
-    `eliminaciones: ${normalized.deleted || 0}`
+    `movimientos nuevos efectivos: ${normalized.created || 0}`,
+    `movimientos modificados: ${normalized.updated || 0}`,
+    `movimientos eliminados: ${normalized.deleted || 0}`
   ];
 }
 
@@ -148,7 +308,7 @@ function extractEventCountsFromPayload(payload) {
 let billingNotificationState = {
   ids: [],
   unreadCount: 0,
-  eventCounts: createEmptyEventCounts()
+  movementSummaries: {}
 };
 let billingNotificationTimer = null;
 
@@ -463,7 +623,7 @@ function showFilterAlert(message) {
 
 function updateBillingNotificationBadges(state) {
   if (!billingNotificationBadgeContainer || !billingSyncButton) return;
-  const counts = normalizeEventCounts(state?.eventCounts);
+  const counts = normalizeEventCounts(state?.movementSummaries);
   const totalFromCounts = Object.values(counts).reduce((sum, value) => sum + value, 0);
   const total = Number.isFinite(state?.unreadCount)
     ? Math.max(totalFromCounts, Math.max(0, Math.trunc(state.unreadCount)))
@@ -530,10 +690,11 @@ function scheduleBillingNotificationRefresh() {
 async function fetchBillingNotificationState() {
   const ids = [];
   let unreadCount = 0;
-  const eventCounts = createEmptyEventCounts();
+  const movementEventMap = new Map();
   let cursor = null;
   let first = true;
   let iterations = 0;
+  let eventSequence = 0;
 
   while (true) {
     const options = {
@@ -562,8 +723,20 @@ async function fetchBillingNotificationState() {
           const eventType = item.variables?.event;
           if (typeof eventType === 'string') {
             const normalized = eventType.toLowerCase();
-            if (Object.prototype.hasOwnProperty.call(eventCounts, normalized)) {
-              eventCounts[normalized] += 1;
+            if (BILLING_NOTIFICATION_EVENT_TYPES.includes(normalized)) {
+              const movementId = extractMovementIdFromNotification(item);
+              if (movementId) {
+                const { timestamp, raw } = extractNotificationTimestamp(item);
+                const existing = movementEventMap.get(movementId) || [];
+                existing.push({
+                  type: normalized,
+                  createdAt: raw,
+                  timestamp,
+                  sequence: eventSequence
+                });
+                movementEventMap.set(movementId, existing);
+                eventSequence += 1;
+              }
             }
           }
         }
@@ -578,12 +751,42 @@ async function fetchBillingNotificationState() {
     cursor = nextCursor;
   }
 
-  const totalFromCounts = Object.values(eventCounts).reduce((sum, value) => sum + value, 0);
+  const movementSummaries = {};
+  movementEventMap.forEach((events, movementId) => {
+    if (!Array.isArray(events) || !events.length) return;
+    const sorted = events
+      .slice()
+      .sort((a, b) => {
+        const aHasTimestamp = Number.isFinite(a.timestamp);
+        const bHasTimestamp = Number.isFinite(b.timestamp);
+        if (aHasTimestamp && bHasTimestamp && a.timestamp !== b.timestamp) {
+          return a.timestamp - b.timestamp;
+        }
+        if (aHasTimestamp && !bHasTimestamp) return -1;
+        if (!aHasTimestamp && bHasTimestamp) return 1;
+        const aSeq = Number.isFinite(a.sequence) ? a.sequence : 0;
+        const bSeq = Number.isFinite(b.sequence) ? b.sequence : 0;
+        return aSeq - bSeq;
+      });
+    const netEvent = computeNetMovementEvent(sorted);
+    if (!netEvent) return;
+    movementSummaries[movementId] = {
+      type: netEvent,
+      events: sorted.map(event => ({
+        type: event.type,
+        createdAt: event.createdAt ?? null,
+        timestamp: Number.isFinite(event.timestamp) ? event.timestamp : null
+      }))
+    };
+  });
+
+  const counts = normalizeEventCounts(movementSummaries);
+  const totalFromCounts = Object.values(counts).reduce((sum, value) => sum + value, 0);
   if (!Number.isFinite(unreadCount) || unreadCount < totalFromCounts) {
     unreadCount = totalFromCounts;
   }
 
-  return { ids, unreadCount, eventCounts };
+  return { ids, unreadCount, movementSummaries };
 }
 
 async function refreshBillingNotificationIndicator() {
@@ -591,15 +794,18 @@ async function refreshBillingNotificationIndicator() {
   stopBillingNotificationRefreshTimer();
   try {
     const state = await fetchBillingNotificationState();
-    const eventCounts = normalizeEventCounts(state.eventCounts);
-    const totalFromCounts = Object.values(eventCounts).reduce((sum, value) => sum + value, 0);
+    const movementCounts = normalizeEventCounts(state.movementSummaries);
+    const totalFromCounts = Object.values(movementCounts).reduce(
+      (sum, value) => sum + value,
+      0
+    );
     const count = Number.isFinite(state.unreadCount)
       ? Math.max(totalFromCounts, Math.max(0, Math.trunc(state.unreadCount)))
       : Math.max(totalFromCounts, state.ids.length);
     billingNotificationState = {
       ids: state.ids,
       unreadCount: count,
-      eventCounts
+      movementSummaries: state.movementSummaries
     };
     updateBillingNotificationBadges(billingNotificationState);
   } catch (error) {
@@ -616,15 +822,18 @@ async function markBillingNotificationsAsRead() {
   if (!billingNotificationState.ids.length) {
     try {
       const state = await fetchBillingNotificationState();
-      const eventCounts = normalizeEventCounts(state.eventCounts);
-      const totalFromCounts = Object.values(eventCounts).reduce((sum, value) => sum + value, 0);
+      const movementCounts = normalizeEventCounts(state.movementSummaries);
+      const totalFromCounts = Object.values(movementCounts).reduce(
+        (sum, value) => sum + value,
+        0
+      );
       const count = Number.isFinite(state.unreadCount)
         ? Math.max(totalFromCounts, Math.max(0, Math.trunc(state.unreadCount)))
         : Math.max(totalFromCounts, state.ids.length);
       billingNotificationState = {
         ids: state.ids,
         unreadCount: count,
-        eventCounts
+        movementSummaries: state.movementSummaries
       };
       updateBillingNotificationBadges(billingNotificationState);
     } catch (error) {
@@ -638,7 +847,7 @@ async function markBillingNotificationsAsRead() {
     updateBillingNotificationBadges({
       ids: [],
       unreadCount: 0,
-      eventCounts: createEmptyEventCounts()
+      movementSummaries: {}
     });
     scheduleBillingNotificationRefresh();
     return;
@@ -668,7 +877,7 @@ async function markBillingNotificationsAsRead() {
   billingNotificationState = {
     ids: [],
     unreadCount: 0,
-    eventCounts: createEmptyEventCounts()
+    movementSummaries: {}
   };
   updateBillingNotificationBadges(billingNotificationState);
   scheduleBillingNotificationRefresh();
@@ -781,7 +990,7 @@ if (billingSyncButton) {
   billingSyncButton.addEventListener('click', async () => {
     if (billingSyncButton.disabled) return;
     const initialSummaryLines = getBillingEventSummaryLines(
-      billingNotificationState.eventCounts
+      billingNotificationState.movementSummaries
     );
     if (typeof showAlertModal === 'function') {
       try {
