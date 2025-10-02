@@ -20,14 +20,14 @@ services:
     restart: unless-stopped
     networks:
       - IW_internal
-      - IW_tunnel_net
+      - IW_tunn_net
       - TA-IW_NET
 
 networks:
   IW_internal:
     driver: bridge
     name: IW_internal
-  IW_tunnel_net:
+  IW_tunn_net:
     external: true
   TA-IW_NET:
     external: true
