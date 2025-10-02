@@ -7,6 +7,7 @@ from typing import Optional
 
 import pytest
 from fastapi import HTTPException, status
+from sqlalchemy import delete
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 APP_DIR = BASE_DIR / "app"
@@ -16,7 +17,10 @@ if str(APP_DIR) not in sys.path:
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 os.environ.setdefault("DB_SCHEMA", "")
 
-from routes.transactions import create_tx  # noqa: E402
+from config.constants import Currency  # noqa: E402
+from config.db import SessionLocal, init_db  # noqa: E402
+from models import Account, Transaction  # noqa: E402
+from routes.transactions import create_tx, list_transactions  # noqa: E402
 from schemas import TransactionCreate  # noqa: E402
 
 
@@ -64,3 +68,138 @@ def test_create_tx_rejects_billing_account():
         exc_info.value.detail
         == "No se permiten movimientos manuales para la cuenta de facturación"
     )
+
+
+@pytest.fixture
+def db_session():
+    init_db()
+    with SessionLocal() as session:
+        session.execute(delete(Transaction))
+        session.execute(delete(Account))
+        session.commit()
+        yield session
+        session.execute(delete(Transaction))
+        session.execute(delete(Account))
+        session.commit()
+
+
+def _create_account(session, name: str) -> Account:
+    account = Account(name=name, currency=Currency.ARS, opening_balance=Decimal("0"))
+    session.add(account)
+    session.commit()
+    session.refresh(account)
+    return account
+
+
+def _create_transaction(
+    session,
+    account: Account,
+    *,
+    tx_date: date,
+    description: str,
+    amount: Decimal,
+    notes: str = "",
+) -> Transaction:
+    transaction = Transaction(
+        account_id=account.id,
+        date=tx_date,
+        description=description,
+        amount=amount,
+        notes=notes,
+    )
+    session.add(transaction)
+    session.commit()
+    session.refresh(transaction)
+    return transaction
+
+
+def test_list_transactions_filters_and_paginates(db_session):
+    account_a = _create_account(db_session, "Cuenta Pagos")
+    account_b = _create_account(db_session, "Cuenta Otros")
+
+    newer = _create_transaction(
+        db_session,
+        account_a,
+        tx_date=date(2023, 5, 10),
+        description="Pago alquiler",
+        amount=Decimal("-500"),
+        notes="Mayo",
+    )
+    _create_transaction(
+        db_session,
+        account_a,
+        tx_date=date(2023, 5, 8),
+        description="Pago proveedor",
+        amount=Decimal("-200"),
+        notes="insumos",
+    )
+    _create_transaction(
+        db_session,
+        account_a,
+        tx_date=date(2023, 5, 5),
+        description="Cobro cliente",
+        amount=Decimal("1000"),
+    )
+    _create_transaction(
+        db_session,
+        account_b,
+        tx_date=date(2023, 5, 9),
+        description="Pago externo",
+        amount=Decimal("-50"),
+    )
+
+    result = list_transactions(
+        limit=1,
+        offset=0,
+        search="PAGO",
+        start_date=date(2023, 5, 1),
+        end_date=date(2023, 5, 31),
+        account_id=account_a.id,
+        db=db_session,
+    )
+
+    assert result.limit == 1
+    assert result.offset == 0
+    assert result.total == 2
+    assert result.has_more is True
+    assert len(result.items) == 1
+    assert result.items[0].id == newer.id
+
+
+def test_list_transactions_respects_offset_metadata(db_session):
+    account = _create_account(db_session, "Cuenta Paginacion")
+    _create_transaction(
+        db_session,
+        account,
+        tx_date=date(2023, 6, 10),
+        description="Pago alquiler",
+        amount=Decimal("-500"),
+    )
+    second = _create_transaction(
+        db_session,
+        account,
+        tx_date=date(2023, 6, 8),
+        description="Pago proveedor",
+        amount=Decimal("-200"),
+    )
+    third = _create_transaction(
+        db_session,
+        account,
+        tx_date=date(2023, 6, 5),
+        description="Cobro cliente",
+        amount=Decimal("1000"),
+    )
+
+    result = list_transactions(
+        limit=2,
+        offset=1,
+        account_id=account.id,
+        db=db_session,
+    )
+
+    assert result.limit == 2
+    assert result.offset == 1
+    assert result.total == 3
+    assert result.has_more is False
+    descriptions = [item.description for item in result.items]
+    assert descriptions == [second.description, third.description]
