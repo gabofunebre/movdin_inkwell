@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:17
-    container_name: db_iw-dev
+    container_name: IW_mov-din-db
     env_file:
       - .env
     restart: unless-stopped
@@ -12,7 +12,7 @@ services:
 
   app:
     build: .
-    container_name: IW_dev-app
+    container_name: IW_movdin-app
     env_file:
       - .env
     depends_on:
@@ -20,14 +20,14 @@ services:
     restart: unless-stopped
     networks:
       - IW_dev
-      - cloudflared_net
+      - IW_tunnel_net
       - TA-IW_NET
 
 networks:
   IW_dev:
     driver: bridge
     name: IW_dev
-  cloudflared_net:
+  IW_tunnel_net:
     external: true
   TA-IW_NET:
     external: true
