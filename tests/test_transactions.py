@@ -20,7 +20,7 @@ os.environ.setdefault("DB_SCHEMA", "")
 from config.constants import Currency  # noqa: E402
 from config.db import SessionLocal, init_db  # noqa: E402
 from models import Account, Transaction  # noqa: E402
-from routes.transactions import create_tx, list_transactions  # noqa: E402
+from routes.transactions import create_tx, list_transactions, update_tx  # noqa: E402
 from schemas import TransactionCreate  # noqa: E402
 
 
@@ -203,3 +203,48 @@ def test_list_transactions_respects_offset_metadata(db_session):
     assert result.has_more is False
     descriptions = [item.description for item in result.items]
     assert descriptions == [second.description, third.description]
+
+
+def test_update_tx_restricts_billing_fields(db_session):
+    billing_account = Account(
+        name="Cuenta facturación",
+        currency=Currency.ARS,
+        opening_balance=Decimal("0"),
+        is_billing=True,
+    )
+    db_session.add(billing_account)
+    db_session.commit()
+    db_session.refresh(billing_account)
+
+    other_account = _create_account(db_session, "Cuenta secundaria")
+
+    original_amount = Decimal("123.45")
+    tx = _create_transaction(
+        db_session,
+        billing_account,
+        tx_date=date(2024, 1, 10),
+        description="Descripción original",
+        amount=original_amount,
+        notes="Notas originales",
+    )
+
+    payload = TransactionCreate(
+        account_id=other_account.id,
+        date=tx.date,
+        description="Concepto editado",
+        amount=Decimal("999.99"),
+        notes="Intento cambiar notas",
+    )
+
+    updated = update_tx(tx_id=tx.id, payload=payload, db=db_session)
+
+    assert updated.description == "Concepto editado"
+    assert updated.amount == original_amount
+    assert updated.account_id == billing_account.id
+    assert updated.notes == "Notas originales"
+
+    db_session.refresh(tx)
+    assert tx.description == "Concepto editado"
+    assert tx.amount == original_amount
+    assert tx.account_id == billing_account.id
+    assert tx.notes == "Notas originales"

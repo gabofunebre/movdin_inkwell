@@ -107,8 +107,12 @@ def update_tx(tx_id: int, payload: TransactionCreate, db: Session = Depends(get_
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se permiten fechas futuras",
         )
-    for field, value in payload.dict().items():
-        setattr(tx, field, value)
+    account = db.get(Account, tx.account_id)
+    if account and account.is_billing:
+        tx.description = payload.description
+    else:
+        for field, value in payload.dict().items():
+            setattr(tx, field, value)
     db.add(tx)
     db.commit()
     db.refresh(tx)
@@ -273,7 +277,12 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                 if existing_tx:
                     existing_tx.date = tx_date
                     existing_tx.amount = amount
-                    existing_tx.description = description
+                    tx_state = inspect(existing_tx)
+                    should_update_description = tx_state.pending or not _has_non_empty_string(
+                        existing_tx.description
+                    )
+                    if should_update_description:
+                        existing_tx.description = description
                     existing_tx.notes = notes
                     db.add(existing_tx)
                 else:
