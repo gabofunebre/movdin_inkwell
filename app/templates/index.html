@@ -35,6 +35,13 @@
         <tbody></tbody>
       </table>
     </div>
+    <div id="tx-pagination" class="d-flex flex-column flex-md-row align-items-center justify-content-between gap-2 py-3">
+      <span id="tx-pagination-summary" class="text-muted">Cargando movimientos...</span>
+      <div class="btn-group" role="group" aria-label="Paginación de movimientos">
+        <button type="button" class="btn btn-outline-secondary" id="tx-pagination-prev" disabled>Anterior</button>
+        <button type="button" class="btn btn-outline-secondary" id="tx-pagination-next" disabled>Siguiente</button>
+      </div>
+    </div>
   </div>
   <div class="modal fade" id="txFilterModal" tabindex="-1" aria-labelledby="tx-filter-title">
     <div class="modal-dialog">

@@ -3,9 +3,65 @@ export async function fetchAccounts(includeInactive = false) {
   return res.json();
 }
 
-export async function fetchTransactions(limit, offset) {
-  const res = await fetch(`/transactions?limit=${limit}&offset=${offset}`);
-  return res.json();
+export async function fetchTransactions(options = {}) {
+  const params = new URLSearchParams();
+  const pageCandidate = Number.parseInt(options.page, 10);
+  const page = Number.isFinite(pageCandidate) && pageCandidate > 0 ? pageCandidate : 1;
+  const limitCandidate = Number.parseInt(options.limit, 10);
+  const limit = Number.isFinite(limitCandidate) && limitCandidate > 0 ? limitCandidate : 50;
+  params.set('page', String(page));
+  params.set('limit', String(limit));
+
+  const search = options.search?.toString().trim();
+  if (search) {
+    params.set('search', search);
+  }
+  if (options.startDate) {
+    params.set('start_date', options.startDate);
+  }
+  if (options.endDate) {
+    params.set('end_date', options.endDate);
+  }
+  if (options.accountId !== undefined && options.accountId !== null && options.accountId !== '') {
+    params.set('account_id', String(options.accountId));
+  }
+
+  const query = params.toString();
+  const res = await fetch(`/transactions${query ? `?${query}` : ''}`);
+  if (!res.ok) {
+    let error = 'No se pudieron obtener los movimientos';
+    try {
+      const data = await res.json();
+      error = data?.detail || data?.message || error;
+    } catch (_) {}
+    throw new Error(error);
+  }
+
+  const data = await res.json();
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const total = Number.isFinite(data?.total)
+    ? data.total
+    : Number.parseInt(data?.total, 10) || 0;
+  const hasMoreRaw =
+    typeof data?.has_more !== 'undefined'
+      ? data.has_more
+      : data?.hasMore;
+  const responsePageCandidate = Number.parseInt(data?.page, 10);
+  const responsePage = Number.isFinite(responsePageCandidate) && responsePageCandidate > 0
+    ? responsePageCandidate
+    : page;
+  const responseLimitCandidate = Number.parseInt(data?.limit, 10);
+  const responseLimit = Number.isFinite(responseLimitCandidate) && responseLimitCandidate > 0
+    ? responseLimitCandidate
+    : limit;
+
+  return {
+    items,
+    total,
+    hasMore: Boolean(hasMoreRaw),
+    page: responsePage,
+    limit: responseLimit,
+  };
 }
 
 export async function fetchNotifications(options = {}) {
