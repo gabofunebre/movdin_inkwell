@@ -691,6 +691,10 @@ async function fetchBillingNotificationState() {
   const ids = [];
   let unreadCount = 0;
   const movementEventMap = new Map();
+  const legacyEventGroups = BILLING_NOTIFICATION_EVENT_TYPES.reduce((acc, type) => {
+    acc[type] = [];
+    return acc;
+  }, {});
   let cursor = null;
   let first = true;
   let iterations = 0;
@@ -725,8 +729,8 @@ async function fetchBillingNotificationState() {
             const normalized = eventType.toLowerCase();
             if (BILLING_NOTIFICATION_EVENT_TYPES.includes(normalized)) {
               const movementId = extractMovementIdFromNotification(item);
+              const { timestamp, raw } = extractNotificationTimestamp(item);
               if (movementId) {
-                const { timestamp, raw } = extractNotificationTimestamp(item);
                 const existing = movementEventMap.get(movementId) || [];
                 existing.push({
                   type: normalized,
@@ -735,8 +739,15 @@ async function fetchBillingNotificationState() {
                   sequence: eventSequence
                 });
                 movementEventMap.set(movementId, existing);
-                eventSequence += 1;
+              } else if (legacyEventGroups[normalized]) {
+                legacyEventGroups[normalized].push({
+                  type: normalized,
+                  createdAt: raw,
+                  timestamp,
+                  sequence: eventSequence
+                });
               }
+              eventSequence += 1;
             }
           }
         }
@@ -751,7 +762,7 @@ async function fetchBillingNotificationState() {
     cursor = nextCursor;
   }
 
-  const movementSummaries = {};
+  const dedupedSummaries = {};
   movementEventMap.forEach((events, movementId) => {
     if (!Array.isArray(events) || !events.length) return;
     const sorted = events
@@ -770,7 +781,7 @@ async function fetchBillingNotificationState() {
       });
     const netEvent = computeNetMovementEvent(sorted);
     if (!netEvent) return;
-    movementSummaries[movementId] = {
+    dedupedSummaries[movementId] = {
       type: netEvent,
       events: sorted.map(event => ({
         type: event.type,
@@ -779,6 +790,42 @@ async function fetchBillingNotificationState() {
       }))
     };
   });
+
+  const legacySummaries = {};
+  BILLING_NOTIFICATION_EVENT_TYPES.forEach(type => {
+    const events = legacyEventGroups[type];
+    if (!Array.isArray(events) || !events.length) return;
+    const sorted = events
+      .slice()
+      .sort((a, b) => {
+        const aHasTimestamp = Number.isFinite(a.timestamp);
+        const bHasTimestamp = Number.isFinite(b.timestamp);
+        if (aHasTimestamp && bHasTimestamp && a.timestamp !== b.timestamp) {
+          return a.timestamp - b.timestamp;
+        }
+        if (aHasTimestamp && !bHasTimestamp) return -1;
+        if (!aHasTimestamp && bHasTimestamp) return 1;
+        const aSeq = Number.isFinite(a.sequence) ? a.sequence : 0;
+        const bSeq = Number.isFinite(b.sequence) ? b.sequence : 0;
+        return aSeq - bSeq;
+      });
+    legacySummaries[`legacy:${type}`] = {
+      type,
+      legacy: true,
+      events: sorted.map(event => ({
+        type: event.type,
+        createdAt: event.createdAt ?? null,
+        timestamp: Number.isFinite(event.timestamp) ? event.timestamp : null
+      }))
+    };
+  });
+
+  // Mientras convivimos con payloads mixtos combinamos los resúmenes deduplicados
+  // y los "legacy" para facilitar su remoción cuando ya no sean necesarios.
+  const movementSummaries = {
+    ...legacySummaries,
+    ...dedupedSummaries
+  };
 
   const counts = normalizeEventCounts(movementSummaries);
   const totalFromCounts = Object.values(counts).reduce((sum, value) => sum + value, 0);
