@@ -26,7 +26,7 @@ services:
 networks:
   IW_internal:
     driver: bridge
-    name: IW_dev
+    name: IW_internal
   IW_tunnel_net:
     external: true
   TA-IW_NET:
