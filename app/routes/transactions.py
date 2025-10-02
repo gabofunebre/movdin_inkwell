@@ -138,6 +138,7 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
         billing_account.billing_last_changes_confirmed_id = changes_confirmed
 
     staged_transactions: dict[int, Transaction] = {}
+    deleted_transactions: set[int] = set()
 
     try:
         for change in transaction_events:
@@ -166,6 +167,12 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                     detail="Movimiento recibido sin identificador válido",
                 )
 
+            if remote_id in deleted_transactions:
+                # Una vez que el movimiento se marca como eliminado en el lote,
+                # ignoramos cualquier evento posterior para ese mismo id.
+                continue
+
+            applied_event = False
             existing_tx = staged_transactions.get(remote_id)
             if existing_tx is None:
                 existing_tx = db.scalar(
@@ -191,6 +198,8 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                 else:
                     db.delete(existing_tx)
                 staged_transactions.pop(remote_id, None)
+                deleted_transactions.add(remote_id)
+                applied_event = True
             else:
                 if not isinstance(payload, dict):
                     raise HTTPException(
@@ -239,8 +248,10 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                     )
                     db.add(new_tx)
                     staged_transactions[remote_id] = new_tx
+                applied_event = True
 
-            counters[event] += 1
+            if applied_event:
+                counters[event] += 1
 
         # Procesamos los cambios de exportación sólo para confirmar checkpoints
         for change in remote_changes:
