@@ -6,13 +6,13 @@ from typing import List
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
-from sqlalchemy import select, inspect
+from sqlalchemy import select, inspect, func, or_
 from sqlalchemy.orm import Session
 
 from config.db import get_db
 from models import Account, Transaction
 from auth import require_admin
-from schemas import TransactionCreate, TransactionOut
+from schemas import TransactionCreate, TransactionOut, TransactionPage
 
 router = APIRouter(prefix="/transactions")
 
@@ -46,16 +46,55 @@ def create_tx(payload: TransactionCreate, db: Session = Depends(get_db)):
     return tx
 
 
-@router.get("", response_model=List[TransactionOut])
-def list_transactions(limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+@router.get("", response_model=TransactionPage)
+def list_transactions(
+    limit: int = 50,
+    offset: int = 0,
+    search: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    account_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    limit = max(1, limit)
+    offset = max(0, offset)
+
+    filters = []
+    if account_id is not None:
+        filters.append(Transaction.account_id == account_id)
+    if start_date is not None:
+        filters.append(Transaction.date >= start_date)
+    if end_date is not None:
+        filters.append(Transaction.date <= end_date)
+    if _has_non_empty_string(search):
+        term = f"%{search.strip()}%"
+        filters.append(
+            or_(
+                Transaction.description.ilike(term),
+                Transaction.notes.ilike(term),
+            )
+        )
+
+    base_query = select(Transaction).where(*filters)
+
     stmt = (
-        select(Transaction)
-        .order_by(Transaction.date.desc(), Transaction.id.desc())
+        base_query.order_by(Transaction.date.desc(), Transaction.id.desc())
         .limit(limit)
         .offset(offset)
     )
-    rows = db.scalars(stmt).all()
-    return rows
+    items = db.scalars(stmt).all()
+
+    total_stmt = select(func.count()).select_from(Transaction).where(*filters)
+    total = db.scalar(total_stmt) or 0
+    has_more = offset + len(items) < total
+
+    return TransactionPage(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=has_more,
+    )
 
 
 @router.put("/{tx_id}", response_model=TransactionOut, dependencies=[Depends(require_admin)])

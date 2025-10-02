@@ -45,6 +45,14 @@ class TransactionWithBalance(TransactionOut):
     running_balance: Decimal
 
 
+class TransactionPage(BaseModel):
+    items: List[TransactionOut]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
 class InvoiceCreate(BaseModel):
     account_id: int
     date: date
