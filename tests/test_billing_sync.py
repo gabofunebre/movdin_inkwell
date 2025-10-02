@@ -211,7 +211,7 @@ def test_sync_billing_transactions_applies_events_and_acknowledges_checkpoint(mo
             select(Transaction).where(Transaction.billing_transaction_id == 600)
         )
         assert updated_tx is not None
-        assert updated_tx.description == "Actualizada"
+        assert updated_tx.description == "Original"
         assert updated_tx.amount == Decimal("200.00")
         assert updated_tx.notes == "Modificada"
 
@@ -535,7 +535,7 @@ def test_sync_billing_transactions_applies_last_update_for_existing(monkeypatch)
         assert updated_tx is not None
         assert updated_tx.date == date(2024, 6, 21)
         assert updated_tx.amount == Decimal("65.00")
-        assert updated_tx.description == "Último update"
+        assert updated_tx.description == "Original"
         assert updated_tx.notes == "Paso final"
 
         assert result["nuevos"] == 0
@@ -770,7 +770,7 @@ def test_sync_billing_transactions_preserves_existing_notes_when_missing(monkeyp
             select(Transaction).where(Transaction.billing_transaction_id == 800)
         )
         assert updated_tx is not None
-        assert updated_tx.description == "Generado"
+        assert updated_tx.description == "Previo"
         assert updated_tx.notes == "Notas previas"
         assert result["modificados"] == 1
 

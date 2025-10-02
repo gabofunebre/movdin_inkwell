@@ -65,7 +65,6 @@ const BILLING_NOTIFICATION_TYPE = 'movimiento_cta_facturacion_iw';
 const BILLING_NOTIFICATION_PAGE_LIMIT = 100;
 const BILLING_NOTIFICATION_MAX_PAGES = 20;
 const BILLING_NOTIFICATION_REFRESH_INTERVAL_MS = 60000;
-const BILLING_NOTIFICATION_BADGE_MAX = 99;
 
 function createEmptyEventCounts() {
   return BILLING_NOTIFICATION_EVENT_TYPES.reduce((acc, type) => {
@@ -567,9 +566,12 @@ function openModal(type) {
   const availableAccounts = accounts.filter(a => a.is_active && !a.is_billing);
   populateAccounts(form.account_id, availableAccounts);
   form.account_id.disabled = availableAccounts.length === 0;
+  form.date.disabled = false;
+  amountInput.disabled = false;
   form.dataset.type = type;
   form.dataset.mode = 'create';
   delete form.dataset.id;
+  delete form.dataset.billingAccountId;
   alertBox.classList.add('d-none');
   const today = new Date().toISOString().split('T')[0];
   form.date.max = today;
@@ -589,7 +591,11 @@ function openEditModal(tx) {
       a.is_active && (!a.is_billing || a.id === tx.account_id)
   );
   populateAccounts(form.account_id, availableAccounts, tx.account_id);
-  form.account_id.disabled = availableAccounts.length === 0;
+  const account = accountMap[tx.account_id];
+  const isBillingAccount = Boolean(account?.is_billing);
+  form.account_id.disabled = isBillingAccount || availableAccounts.length === 0;
+  form.date.disabled = isBillingAccount;
+  amountInput.disabled = isBillingAccount;
   form.dataset.type = isIncome ? 'income' : 'expense';
   form.dataset.mode = 'edit';
   form.dataset.id = tx.id;
@@ -603,6 +609,11 @@ function openEditModal(tx) {
   descInput.value = tx.description;
   amountInput.value = formatCurrency(Math.abs(tx.amount));
   form.account_id.value = tx.account_id;
+  if (isBillingAccount) {
+    form.dataset.billingAccountId = String(tx.account_id);
+  } else {
+    delete form.dataset.billingAccountId;
+  }
   txModal.show();
 }
 
@@ -784,15 +795,13 @@ function updateBillingNotificationBadges(state) {
     if (!badge) continue;
     const count = counts[type] || 0;
     if (count > 0) {
-      const displayValue =
-        count > BILLING_NOTIFICATION_BADGE_MAX
-          ? `${BILLING_NOTIFICATION_BADGE_MAX}+`
-          : String(count);
-      badge.textContent = displayValue;
+      badge.textContent = '';
+      badge.dataset.count = String(count);
       badge.classList.remove('d-none');
       hasVisibleBadge = true;
     } else {
       badge.textContent = '';
+      delete badge.dataset.count;
       badge.classList.add('d-none');
     }
   }
@@ -1118,6 +1127,18 @@ form.addEventListener('submit', async e => {
   e.preventDefault();
   if (!form.reportValidity()) return;
   const data = new FormData(form);
+  if (!data.has('date') && form.date?.value) {
+    data.set('date', form.date.value);
+  }
+  if (!data.has('amount') && amountInput?.value) {
+    data.set('amount', amountInput.value);
+  }
+  if (!data.has('account_id')) {
+    const lockedAccountId = form.dataset.billingAccountId || form.account_id?.value;
+    if (lockedAccountId) {
+      data.set('account_id', lockedAccountId);
+    }
+  }
   let amount = parseDecimal(data.get('amount'));
   amount = form.dataset.type === 'expense' ? -Math.abs(amount) : Math.abs(amount);
   const payload = {
