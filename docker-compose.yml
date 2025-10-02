@@ -8,7 +8,7 @@ services:
     volumes:
       - ${POSTGRES_DATA_PATH}:/var/lib/postgresql/data
     networks:
-      -  IW_dev
+      -  IW_internal
 
   app:
     build: .
@@ -19,12 +19,12 @@ services:
       - db
     restart: unless-stopped
     networks:
-      - IW_dev
+      - IW_internal
       - IW_tunnel_net
       - TA-IW_NET
 
 networks:
-  IW_dev:
+  IW_internal:
     driver: bridge
     name: IW_dev
   IW_tunnel_net:
