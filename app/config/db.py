@@ -253,6 +253,125 @@ def _apply_schema_upgrades() -> None:
                         )
                     )
 
+
+        if "billing_transaction_sync_states" in table_names:
+            columns = {
+                col["name"]
+                for col in inspector.get_columns("billing_transaction_sync_states", schema=schema)
+            }
+            table = _qualified_table("billing_transaction_sync_states")
+            if "exportable_movement_id" not in columns:
+                col_type = "BIGINT" if engine.dialect.name == "postgresql" else "INTEGER"
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} "
+                        f"ADD COLUMN exportable_movement_id {col_type}"
+                    )
+                )
+            if "is_custom_inkwell" not in columns:
+                if engine.dialect.name == "postgresql":
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table} "
+                            "ADD COLUMN is_custom_inkwell BOOLEAN DEFAULT FALSE NOT NULL"
+                        )
+                    )
+                else:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table} "
+                            "ADD COLUMN is_custom_inkwell BOOLEAN DEFAULT 0"
+                        )
+                    )
+            if "status" not in columns:
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} "
+                        "ADD COLUMN status VARCHAR(20) DEFAULT 'unavailable' NOT NULL"
+                    )
+                )
+            if "updated_at_event_id" not in columns:
+                col_type = "BIGINT" if engine.dialect.name == "postgresql" else "INTEGER"
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} "
+                        f"ADD COLUMN updated_at_event_id {col_type} DEFAULT 0 NOT NULL"
+                    )
+                )
+            if "created_at" not in columns:
+                if engine.dialect.name == "postgresql":
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table} "
+                            "ADD COLUMN created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL"
+                        )
+                    )
+                else:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table} "
+                            "ADD COLUMN created_at DATETIME"
+                        )
+                    )
+            if "updated_at" not in columns:
+                if engine.dialect.name == "postgresql":
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table} "
+                            "ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL"
+                        )
+                    )
+                else:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table} "
+                            "ADD COLUMN updated_at DATETIME"
+                        )
+                    )
+        elif "transactions" in table_names:
+            # Backward-compatible creation for environments where metadata.create_all
+            # did not create the sync-state table yet.
+            if engine.dialect.name == "postgresql":
+                conn.execute(
+                    text(
+                        f"CREATE TABLE IF NOT EXISTS {_qualified_table('billing_transaction_sync_states')} ("
+                        "transaction_id BIGINT PRIMARY KEY, "
+                        "exportable_movement_id BIGINT, "
+                        "is_custom_inkwell BOOLEAN DEFAULT FALSE NOT NULL, "
+                        "status VARCHAR(20) DEFAULT 'unavailable' NOT NULL, "
+                        "updated_at_event_id BIGINT DEFAULT 0 NOT NULL, "
+                        "created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL, "
+                        "updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL"
+                        ")"
+                    )
+                )
+                conn.execute(
+                    text(
+                        f"CREATE INDEX IF NOT EXISTS ix_billing_tx_sync_status "
+                        f"ON {_qualified_table('billing_transaction_sync_states')}(status)"
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS billing_transaction_sync_states ("
+                        "transaction_id INTEGER PRIMARY KEY, "
+                        "exportable_movement_id INTEGER, "
+                        "is_custom_inkwell BOOLEAN DEFAULT 0, "
+                        "status VARCHAR(20) DEFAULT 'unavailable' NOT NULL, "
+                        "updated_at_event_id INTEGER DEFAULT 0 NOT NULL, "
+                        "created_at DATETIME, "
+                        "updated_at DATETIME"
+                        ")"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_billing_tx_sync_status "
+                        "ON billing_transaction_sync_states(status)"
+                    )
+                )
+
         if "transactions" in table_names:
             columns = {
                 col["name"]

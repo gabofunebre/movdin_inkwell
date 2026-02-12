@@ -10,7 +10,7 @@ from sqlalchemy import select, inspect, func, or_
 from sqlalchemy.orm import Session
 
 from config.db import get_db
-from models import Account, Transaction
+from models import Account, BillingTransactionSyncState, Transaction
 from auth import require_admin
 from schemas import TransactionCreate, TransactionOut, TransactionPage
 
@@ -181,6 +181,7 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
         billing_account.billing_last_changes_confirmed_id = changes_confirmed
 
     staged_transactions: dict[int, Transaction] = {}
+    staged_sync_states: dict[int, BillingTransactionSyncState] = {}
     deleted_transactions: set[int] = set()
 
     try:
@@ -198,6 +199,13 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                     detail="Evento desconocido recibido desde facturación",
                 )
 
+            event_id = _parse_remote_identifier(change.get("id"), "transaction_events[].id")
+            if event_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Evento recibido sin identificador válido",
+                )
+
             payload = change.get("transaction")
             remote_id = _parse_remote_identifier(
                 change.get("transaction_id"), "transaction_id"
@@ -211,8 +219,6 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                 )
 
             if remote_id in deleted_transactions:
-                # Una vez que el movimiento se marca como eliminado en el lote,
-                # ignoramos cualquier evento posterior para ese mismo id.
                 continue
 
             applied_event = False
@@ -226,20 +232,33 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                 if existing_tx is not None:
                     staged_transactions[remote_id] = existing_tx
 
+            sync_state = staged_sync_states.get(remote_id)
+            if sync_state is None:
+                sync_state = db.get(BillingTransactionSyncState, remote_id)
+                if sync_state is not None:
+                    staged_sync_states[remote_id] = sync_state
+
+            last_applied_event_id = sync_state.updated_at_event_id if sync_state else 0
+            if event_id < last_applied_event_id:
+                continue
+
             if event == "deleted":
-                if not existing_tx:
-                    # Idempotencia: si no existe registro local, marcamos el id como
-                    # eliminado para ignorar eventos posteriores en el mismo lote.
-                    deleted_transactions.add(remote_id)
-                else:
+                if existing_tx:
                     tx_state = inspect(existing_tx)
                     if tx_state.pending:
                         db.expunge(existing_tx)
                     else:
                         db.delete(existing_tx)
                     staged_transactions.pop(remote_id, None)
-                    deleted_transactions.add(remote_id)
                     applied_event = True
+
+                if sync_state is None:
+                    sync_state = BillingTransactionSyncState(transaction_id=remote_id)
+                    staged_sync_states[remote_id] = sync_state
+                sync_state.status = "unavailable"
+                sync_state.updated_at_event_id = event_id
+                db.add(sync_state)
+                deleted_transactions.add(remote_id)
             else:
                 if not isinstance(payload, dict):
                     raise HTTPException(
@@ -293,6 +312,23 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
                     )
                     db.add(new_tx)
                     staged_transactions[remote_id] = new_tx
+
+                if sync_state is None:
+                    sync_state = BillingTransactionSyncState(transaction_id=remote_id)
+                    staged_sync_states[remote_id] = sync_state
+
+                exportable_movement_id = _parse_remote_identifier(
+                    payload.get("exportable_movement_id"), "transaction.exportable_movement_id"
+                )
+                is_custom_inkwell = bool(payload.get("is_custom_inkwell") is True)
+                sync_state.exportable_movement_id = exportable_movement_id
+                sync_state.is_custom_inkwell = is_custom_inkwell
+                sync_state.status = _resolve_sync_status(
+                    exportable_movement_id=exportable_movement_id,
+                    is_custom_inkwell=is_custom_inkwell,
+                )
+                sync_state.updated_at_event_id = event_id
+                db.add(sync_state)
                 applied_event = True
 
             if applied_event:
@@ -637,6 +673,13 @@ def _parse_remote_identifier(value: object, field_name: str) -> int | None:
             detail=f"Valor inválido para {field_name} en la respuesta de facturación",
         ) from exc
 
+
+
+
+def _resolve_sync_status(exportable_movement_id: int | None, is_custom_inkwell: bool) -> str:
+    if exportable_movement_id is None or is_custom_inkwell:
+        return "unavailable"
+    return "available"
 
 def _parse_remote_timestamp(value: object) -> datetime | None:
     if not value:
