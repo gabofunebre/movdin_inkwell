@@ -839,7 +839,7 @@ def test_sync_billing_transactions_requires_description(monkeypatch):
         assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
 
 
-def test_sync_billing_transactions_ignores_missing_delete_and_is_idempotent(monkeypatch):
+def test_sync_billing_transactions_is_idempotent_for_repeated_event_batch(monkeypatch):
     os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
     os.environ["BILLING_API_KEY"] = "secret"
 
@@ -850,19 +850,35 @@ def test_sync_billing_transactions_ignores_missing_delete_and_is_idempotent(monk
             {
                 "transactions": [],
                 "transaction_events": [
-                    _build_transaction_event("deleted", 1234, None),
-                    _build_transaction_event("deleted", 1234, None),
-                    _build_transaction_event(
-                        "updated",
-                        1234,
-                        {
-                            "id": 1234,
-                            "date": "2024-06-16",
-                            "amount": "130.00",
-                            "description": "Movimiento resucitado",
-                            "notes": "Ignorar",
+                    {
+                        "id": 700,
+                        "event": "created",
+                        "transaction_id": 6600,
+                        "transaction": {
+                            "id": 6600,
+                            "date": "2024-07-10",
+                            "amount": "21.00",
+                            "description": "Creado",
+                            "notes": "",
+                            "exportable_movement_id": 500,
+                            "is_custom_inkwell": False,
                         },
-                    ),
+                    },
+                    {
+                        "id": 701,
+                        "event": "updated",
+                        "transaction_id": 6600,
+                        "transaction": {
+                            "id": 6600,
+                            "date": "2024-07-11",
+                            "amount": "22.00",
+                            "description": "Actualizado",
+                            "notes": "",
+                            "exportable_movement_id": None,
+                            "is_custom_inkwell": False,
+                        },
+                    },
+                    _build_transaction_event("deleted", 6600, None),
                 ],
                 "transactions_checkpoint_id": 910,
                 "last_confirmed_transaction_id": 900,
@@ -884,24 +900,94 @@ def test_sync_billing_transactions_ignores_missing_delete_and_is_idempotent(monk
             is_active=True,
             is_billing=True,
         )
-        account.billing_last_transactions_checkpoint_id = 800
         session.add(account)
         session.commit()
 
+        first = sync_billing_transactions(limit=100, db=session)
+        state_after_first = session.get(BillingTransactionSyncState, 6600)
+        tx_after_first = session.scalar(select(Transaction).where(Transaction.billing_transaction_id == 6600))
+
+        second = sync_billing_transactions(limit=100, db=session)
+        state_after_second = session.get(BillingTransactionSyncState, 6600)
+        tx_after_second = session.scalar(select(Transaction).where(Transaction.billing_transaction_id == 6600))
+
+        assert tx_after_first is None
+        assert tx_after_second is None
+        assert state_after_first is not None
+        assert state_after_second is not None
+        assert first["transactions_checkpoint_id"] == second["transactions_checkpoint_id"]
+        assert first["transactions_confirmed_id"] == second["transactions_confirmed_id"]
+        assert state_after_first.status == state_after_second.status == "unavailable"
+        assert state_after_first.updated_at_event_id == state_after_second.updated_at_event_id == 6600
+
+
+def test_sync_billing_transactions_fails_when_deleting_missing_transaction(monkeypatch):
+    os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
+    os.environ["BILLING_API_KEY"] = "secret"
+
+    ack_called = False
+    commits_seen = 0
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert headers == {"X-API-Key": "secret"}
+        return DummyResponse(
+            200,
+            {
+                "transactions": [],
+                "transaction_events": [_build_transaction_event("deleted", 1234, None)],
+                "transactions_checkpoint_id": 910,
+                "last_confirmed_transaction_id": 900,
+                "changes": [],
+                "changes_checkpoint_id": 910,
+                "last_confirmed_change_id": 900,
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    def fake_ack(*_args, **_kwargs):
+        nonlocal ack_called
+        assert commits_seen >= 1
+        ack_called = True
+        return {}
+
+    monkeypatch.setattr(transactions_module, "_acknowledge_billing_checkpoint", fake_ack)
+
+    with db.SessionLocal() as session:
+        account = Account(
+            name="Cuenta facturación",
+            opening_balance=Decimal("0"),
+            currency=Currency.ARS,
+            color="#000000",
+            is_active=True,
+            is_billing=True,
+        )
+        session.add(account)
+        session.commit()
+
+        original_commit = session.commit
+
+        def tracked_commit():
+            nonlocal commits_seen
+            commits_seen += 1
+            return original_commit()
+
+        monkeypatch.setattr(session, "commit", tracked_commit)
+
         result = sync_billing_transactions(limit=100, db=session)
 
-        assert result["eliminados"] == 0
+        assert ack_called
         assert result["nuevos"] == 0
         assert result["modificados"] == 0
+        assert result["eliminados"] == 0
 
-        stored_tx = session.scalar(
-            select(Transaction).where(Transaction.billing_transaction_id == 1234)
-        )
+        stored_tx = session.scalar(select(Transaction).where(Transaction.billing_transaction_id == 1234))
         assert stored_tx is None
 
-        session.refresh(account)
-        assert account.billing_last_transactions_checkpoint_id == 910
-        assert account.billing_last_transactions_confirmed_id == 900
+        state = session.get(BillingTransactionSyncState, 1234)
+        assert state is not None
+        assert state.status == "unavailable"
+        assert state.updated_at_event_id == 1234
 
 
 def test_sync_billing_transactions_requires_billing_account(monkeypatch):
@@ -920,7 +1006,138 @@ def test_sync_billing_transactions_requires_billing_account(monkeypatch):
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
 
-def test_sync_billing_transactions_tracks_exportable_status_and_event_id(monkeypatch):
+def test_sync_billing_transactions_created_event_marks_transaction_available(monkeypatch):
+    os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
+    os.environ["BILLING_API_KEY"] = "secret"
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert headers == {"X-API-Key": "secret"}
+        return DummyResponse(
+            200,
+            {
+                "transactions": [],
+                "transaction_events": [
+                    {
+                        "id": 100,
+                        "event": "created",
+                        "transaction_id": 5500,
+                        "transaction": {
+                            "id": 5500,
+                            "date": "2024-07-01",
+                            "amount": "15.00",
+                            "description": "Creado",
+                            "notes": "",
+                            "exportable_movement_id": 880,
+                            "is_custom_inkwell": False,
+                        },
+                    }
+                ],
+                "transactions_checkpoint_id": None,
+                "last_confirmed_transaction_id": None,
+                "changes": [],
+                "changes_checkpoint_id": None,
+                "last_confirmed_change_id": None,
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: DummyResponse(200, {}))
+
+    with db.SessionLocal() as session:
+        account = Account(
+            name="Cuenta facturación",
+            opening_balance=Decimal("0"),
+            currency=Currency.ARS,
+            color="#000000",
+            is_active=True,
+            is_billing=True,
+        )
+        session.add(account)
+        session.commit()
+
+        sync_billing_transactions(limit=1, db=session)
+
+        state = session.get(BillingTransactionSyncState, 5500)
+        assert state is not None
+        assert state.exportable_movement_id == 880
+        assert state.status == "available"
+
+
+def test_sync_billing_transactions_created_updated_keeps_available_when_exportable(monkeypatch):
+    os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
+    os.environ["BILLING_API_KEY"] = "secret"
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert headers == {"X-API-Key": "secret"}
+        return DummyResponse(
+            200,
+            {
+                "transactions": [],
+                "transaction_events": [
+                    {
+                        "id": 100,
+                        "event": "created",
+                        "transaction_id": 5500,
+                        "transaction": {
+                            "id": 5500,
+                            "date": "2024-07-01",
+                            "amount": "15.00",
+                            "description": "Creado",
+                            "notes": "",
+                            "exportable_movement_id": 880,
+                            "is_custom_inkwell": False,
+                        },
+                    },
+                    {
+                        "id": 101,
+                        "event": "updated",
+                        "transaction_id": 5500,
+                        "transaction": {
+                            "id": 5500,
+                            "date": "2024-07-02",
+                            "amount": "16.00",
+                            "description": "Update",
+                            "notes": "",
+                            "exportable_movement_id": 990,
+                            "is_custom_inkwell": False,
+                        },
+                    },
+                ],
+                "transactions_checkpoint_id": None,
+                "last_confirmed_transaction_id": None,
+                "changes": [],
+                "changes_checkpoint_id": None,
+                "last_confirmed_change_id": None,
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: DummyResponse(200, {}))
+
+    with db.SessionLocal() as session:
+        account = Account(
+            name="Cuenta facturación",
+            opening_balance=Decimal("0"),
+            currency=Currency.ARS,
+            color="#000000",
+            is_active=True,
+            is_billing=True,
+        )
+        session.add(account)
+        session.commit()
+
+        result = sync_billing_transactions(limit=2, db=session)
+
+        state = session.get(BillingTransactionSyncState, 5500)
+        assert state is not None
+        assert state.exportable_movement_id == 990
+        assert state.status == "available"
+        assert state.updated_at_event_id == 101
+        assert result["nuevos"] == 1
+        assert result["modificados"] == 1
+
+
+def test_sync_billing_transactions_created_updated_without_exportable_becomes_unavailable(monkeypatch):
     os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
     os.environ["BILLING_API_KEY"] = "secret"
 
@@ -959,20 +1176,6 @@ def test_sync_billing_transactions_tracks_exportable_status_and_event_id(monkeyp
                             "is_custom_inkwell": False,
                         },
                     },
-                    {
-                        "id": 99,
-                        "event": "updated",
-                        "transaction_id": 5500,
-                        "transaction": {
-                            "id": 5500,
-                            "date": "2024-06-30",
-                            "amount": "10.00",
-                            "description": "Viejo",
-                            "notes": "",
-                            "exportable_movement_id": 777,
-                            "is_custom_inkwell": False,
-                        },
-                    },
                 ],
                 "transactions_checkpoint_id": None,
                 "last_confirmed_transaction_id": None,
@@ -997,21 +1200,71 @@ def test_sync_billing_transactions_tracks_exportable_status_and_event_id(monkeyp
         session.add(account)
         session.commit()
 
-        result = sync_billing_transactions(limit=3, db=session)
+        sync_billing_transactions(limit=2, db=session)
 
         state = session.get(BillingTransactionSyncState, 5500)
         assert state is not None
         assert state.exportable_movement_id is None
         assert state.status == "unavailable"
-        assert state.updated_at_event_id == 101
 
-        tx = session.scalar(
-            select(Transaction).where(Transaction.billing_transaction_id == 5500)
+
+def test_sync_billing_transactions_created_deleted_becomes_unavailable(monkeypatch):
+    os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
+    os.environ["BILLING_API_KEY"] = "secret"
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert headers == {"X-API-Key": "secret"}
+        return DummyResponse(
+            200,
+            {
+                "transactions": [],
+                "transaction_events": [
+                    {
+                        "id": 100,
+                        "event": "created",
+                        "transaction_id": 5500,
+                        "transaction": {
+                            "id": 5500,
+                            "date": "2024-07-01",
+                            "amount": "15.00",
+                            "description": "Creado",
+                            "notes": "",
+                            "exportable_movement_id": 880,
+                            "is_custom_inkwell": False,
+                        },
+                    },
+                    _build_transaction_event("deleted", 5500, None),
+                ],
+                "transactions_checkpoint_id": None,
+                "last_confirmed_transaction_id": None,
+                "changes": [],
+                "changes_checkpoint_id": None,
+                "last_confirmed_change_id": None,
+            },
         )
-        assert tx is not None
-        assert tx.date == date(2024, 7, 2)
-        assert tx.amount == Decimal("16.00")
-        assert result["modificados"] == 1
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: DummyResponse(200, {}))
+
+    with db.SessionLocal() as session:
+        account = Account(
+            name="Cuenta facturación",
+            opening_balance=Decimal("0"),
+            currency=Currency.ARS,
+            color="#000000",
+            is_active=True,
+            is_billing=True,
+        )
+        session.add(account)
+        session.commit()
+
+        sync_billing_transactions(limit=2, db=session)
+
+        state = session.get(BillingTransactionSyncState, 5500)
+        assert state is not None
+        assert state.status == "unavailable"
+        tx = session.scalar(select(Transaction).where(Transaction.billing_transaction_id == 5500))
+        assert tx is None
 
 
 def test_sync_billing_transactions_marks_unavailable_for_custom_inkwell(monkeypatch):
