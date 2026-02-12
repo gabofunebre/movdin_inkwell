@@ -97,6 +97,25 @@ class Transaction(Base):
     account = relationship("Account", back_populates="transactions")
 
 
+class BillingTransactionSyncState(Base):
+    __tablename__ = "billing_transaction_sync_states"
+    __table_args__ = (
+        Index("ix_billing_tx_sync_status", "status"),
+    )
+
+    transaction_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    exportable_movement_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    is_custom_inkwell: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="unavailable")
+    updated_at_event_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class Invoice(Base):
     __tablename__ = "invoices"
     __table_args__ = (
@@ -232,4 +251,3 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-

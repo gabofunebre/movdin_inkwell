@@ -19,7 +19,7 @@ os.environ.setdefault("DB_SCHEMA", "")
 import httpx  # noqa: E402
 from config import db  # noqa: E402
 from config.constants import Currency  # noqa: E402
-from models import Account, Transaction  # noqa: E402
+from models import Account, BillingTransactionSyncState, Transaction  # noqa: E402
 from routes import transactions as transactions_module  # noqa: E402
 from routes.transactions import sync_billing_transactions  # noqa: E402
 
@@ -219,6 +219,20 @@ def test_sync_billing_transactions_applies_events_and_acknowledges_checkpoint(mo
             select(Transaction).where(Transaction.billing_transaction_id == 700)
         )
         assert deleted_tx is None
+
+        created_state = session.get(BillingTransactionSyncState, 501)
+        assert created_state is not None
+        assert created_state.exportable_movement_id is None
+        assert created_state.is_custom_inkwell is False
+        assert created_state.status == "unavailable"
+
+        updated_state = session.get(BillingTransactionSyncState, 600)
+        assert updated_state is not None
+        assert updated_state.status == "unavailable"
+
+        deleted_state = session.get(BillingTransactionSyncState, 700)
+        assert deleted_state is not None
+        assert deleted_state.status == "unavailable"
 
         session.refresh(account)
         assert account.billing_last_transactions_checkpoint_id == 903
@@ -905,3 +919,154 @@ def test_sync_billing_transactions_requires_billing_account(monkeypatch):
             sync_billing_transactions(limit=1, db=session)
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+
+def test_sync_billing_transactions_tracks_exportable_status_and_event_id(monkeypatch):
+    os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
+    os.environ["BILLING_API_KEY"] = "secret"
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert headers == {"X-API-Key": "secret"}
+        return DummyResponse(
+            200,
+            {
+                "transactions": [],
+                "transaction_events": [
+                    {
+                        "id": 100,
+                        "event": "created",
+                        "transaction_id": 5500,
+                        "transaction": {
+                            "id": 5500,
+                            "date": "2024-07-01",
+                            "amount": "15.00",
+                            "description": "Creado",
+                            "notes": "",
+                            "exportable_movement_id": 880,
+                            "is_custom_inkwell": False,
+                        },
+                    },
+                    {
+                        "id": 101,
+                        "event": "updated",
+                        "transaction_id": 5500,
+                        "transaction": {
+                            "id": 5500,
+                            "date": "2024-07-02",
+                            "amount": "16.00",
+                            "description": "Update",
+                            "notes": "",
+                            "exportable_movement_id": None,
+                            "is_custom_inkwell": False,
+                        },
+                    },
+                    {
+                        "id": 99,
+                        "event": "updated",
+                        "transaction_id": 5500,
+                        "transaction": {
+                            "id": 5500,
+                            "date": "2024-06-30",
+                            "amount": "10.00",
+                            "description": "Viejo",
+                            "notes": "",
+                            "exportable_movement_id": 777,
+                            "is_custom_inkwell": False,
+                        },
+                    },
+                ],
+                "transactions_checkpoint_id": None,
+                "last_confirmed_transaction_id": None,
+                "changes": [],
+                "changes_checkpoint_id": None,
+                "last_confirmed_change_id": None,
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: DummyResponse(200, {}))
+
+    with db.SessionLocal() as session:
+        account = Account(
+            name="Cuenta facturación",
+            opening_balance=Decimal("0"),
+            currency=Currency.ARS,
+            color="#000000",
+            is_active=True,
+            is_billing=True,
+        )
+        session.add(account)
+        session.commit()
+
+        result = sync_billing_transactions(limit=3, db=session)
+
+        state = session.get(BillingTransactionSyncState, 5500)
+        assert state is not None
+        assert state.exportable_movement_id is None
+        assert state.status == "unavailable"
+        assert state.updated_at_event_id == 101
+
+        tx = session.scalar(
+            select(Transaction).where(Transaction.billing_transaction_id == 5500)
+        )
+        assert tx is not None
+        assert tx.date == date(2024, 7, 2)
+        assert tx.amount == Decimal("16.00")
+        assert result["modificados"] == 1
+
+
+def test_sync_billing_transactions_marks_unavailable_for_custom_inkwell(monkeypatch):
+    os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
+    os.environ["BILLING_API_KEY"] = "secret"
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert headers == {"X-API-Key": "secret"}
+        return DummyResponse(
+            200,
+            {
+                "transactions": [],
+                "transaction_events": [
+                    {
+                        "id": 300,
+                        "event": "created",
+                        "transaction_id": 5600,
+                        "transaction": {
+                            "id": 5600,
+                            "date": "2024-07-03",
+                            "amount": "20.00",
+                            "description": "Custom IW",
+                            "notes": "",
+                            "exportable_movement_id": 990,
+                            "is_custom_inkwell": True,
+                        },
+                    }
+                ],
+                "transactions_checkpoint_id": None,
+                "last_confirmed_transaction_id": None,
+                "changes": [],
+                "changes_checkpoint_id": None,
+                "last_confirmed_change_id": None,
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: DummyResponse(200, {}))
+
+    with db.SessionLocal() as session:
+        account = Account(
+            name="Cuenta facturación",
+            opening_balance=Decimal("0"),
+            currency=Currency.ARS,
+            color="#000000",
+            is_active=True,
+            is_billing=True,
+        )
+        session.add(account)
+        session.commit()
+
+        sync_billing_transactions(limit=1, db=session)
+
+        state = session.get(BillingTransactionSyncState, 5600)
+        assert state is not None
+        assert state.exportable_movement_id == 990
+        assert state.is_custom_inkwell is True
+        assert state.status == "unavailable"
