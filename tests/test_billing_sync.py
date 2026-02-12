@@ -825,7 +825,7 @@ def test_sync_billing_transactions_requires_description(monkeypatch):
         assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
 
 
-def test_sync_billing_transactions_fails_when_deleting_missing_transaction(monkeypatch):
+def test_sync_billing_transactions_ignores_missing_delete_and_is_idempotent(monkeypatch):
     os.environ["FACTURACION_RUTA_DATA"] = "https://facturacion.example/api/movimientos_cuenta_facturada"
     os.environ["BILLING_API_KEY"] = "secret"
 
@@ -836,7 +836,19 @@ def test_sync_billing_transactions_fails_when_deleting_missing_transaction(monke
             {
                 "transactions": [],
                 "transaction_events": [
-                    _build_transaction_event("deleted", 1234, None)
+                    _build_transaction_event("deleted", 1234, None),
+                    _build_transaction_event("deleted", 1234, None),
+                    _build_transaction_event(
+                        "updated",
+                        1234,
+                        {
+                            "id": 1234,
+                            "date": "2024-06-16",
+                            "amount": "130.00",
+                            "description": "Movimiento resucitado",
+                            "notes": "Ignorar",
+                        },
+                    ),
                 ],
                 "transactions_checkpoint_id": 910,
                 "last_confirmed_transaction_id": 900,
@@ -847,11 +859,7 @@ def test_sync_billing_transactions_fails_when_deleting_missing_transaction(monke
         )
 
     monkeypatch.setattr(httpx, "get", fake_get)
-    monkeypatch.setattr(
-        httpx,
-        "post",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("ack no esperado")),
-    )
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: DummyResponse(200, {}))
 
     with db.SessionLocal() as session:
         account = Account(
@@ -866,14 +874,20 @@ def test_sync_billing_transactions_fails_when_deleting_missing_transaction(monke
         session.add(account)
         session.commit()
 
-        with pytest.raises(HTTPException) as exc_info:
-            sync_billing_transactions(limit=100, db=session)
+        result = sync_billing_transactions(limit=100, db=session)
 
-        assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
+        assert result["eliminados"] == 0
+        assert result["nuevos"] == 0
+        assert result["modificados"] == 0
+
+        stored_tx = session.scalar(
+            select(Transaction).where(Transaction.billing_transaction_id == 1234)
+        )
+        assert stored_tx is None
 
         session.refresh(account)
-        assert account.billing_last_transactions_checkpoint_id == 800
-        assert account.billing_last_transactions_confirmed_id is None
+        assert account.billing_last_transactions_checkpoint_id == 910
+        assert account.billing_last_transactions_confirmed_id == 900
 
 
 def test_sync_billing_transactions_requires_billing_account(monkeypatch):
