@@ -228,21 +228,18 @@ def sync_billing_transactions(limit: int = 100, db: Session = Depends(get_db)):
 
             if event == "deleted":
                 if not existing_tx:
-                    raise HTTPException(
-                        status_code=status.HTTP_502_BAD_GATEWAY,
-                        detail=(
-                            "Se recibió un evento de eliminación para un movimiento"
-                            " inexistente"
-                        ),
-                    )
-                tx_state = inspect(existing_tx)
-                if tx_state.pending:
-                    db.expunge(existing_tx)
+                    # Idempotencia: si no existe registro local, marcamos el id como
+                    # eliminado para ignorar eventos posteriores en el mismo lote.
+                    deleted_transactions.add(remote_id)
                 else:
-                    db.delete(existing_tx)
-                staged_transactions.pop(remote_id, None)
-                deleted_transactions.add(remote_id)
-                applied_event = True
+                    tx_state = inspect(existing_tx)
+                    if tx_state.pending:
+                        db.expunge(existing_tx)
+                    else:
+                        db.delete(existing_tx)
+                    staged_transactions.pop(remote_id, None)
+                    deleted_transactions.add(remote_id)
+                    applied_event = True
             else:
                 if not isinstance(payload, dict):
                     raise HTTPException(
