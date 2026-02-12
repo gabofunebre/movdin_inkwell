@@ -73,6 +73,19 @@ información fiscal consolidada:
   Las otras aplicaciones pueden usar el campo `invoice_reference` de cada
   certificado para relacionarlo con la factura correspondiente.
 
+### Sincronización de movimientos de facturación
+
+- `transaction_events` es la fuente de verdad para aplicar cambios (`created`,
+  `updated`, `deleted`) y evita "movimientos fantasma", porque cada alta,
+  modificación o baja se materializa solo cuando llega su evento explícito.
+- `transactions` se usa como snapshot auxiliar de contexto, pero no define por
+  sí solo el estado final local.
+- Las altas/cambios/bajas en Movdin se derivan exclusivamente de
+  `transaction_events`, procesados en orden por identificador de evento.
+- El ACK se envía al final, después de persistir y confirmar localmente la
+  tanda procesada; así, si algo falla antes del commit o del ACK, la próxima
+  sincronización puede reintentar de forma segura sin perder consistencia.
+
 ## Cálculos de moneda
 
 - **Saldo de cuentas:** El saldo de cada cuenta se calcula como `saldo_inicial + suma(transacciones)` para la fecha indicada.
