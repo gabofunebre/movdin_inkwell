@@ -4,7 +4,7 @@ APP_SVC ?= app
 DOCKER_COMPOSE ?= docker compose
 MSG ?= update
 
-.PHONY: help up down down-v start stop restart ps logs shell rebuild rebuild-v push pull prune run
+.PHONY: help up down down-v start stop restart ps logs shell rebuild rebuild-v push pull prune run backup restore deploy smoke
 
 help:
 	@echo "Comandos disponibles:"
@@ -31,6 +31,13 @@ help:
 	@echo "Utilidades:"
 	@echo "  make prune    - Limpia recursos docker sin usar"
 	@echo "  make run cmd  - Ejecuta un comando dentro del contenedor principal (ej: make run ls -la)"
+
+	@echo ""
+	@echo "Operación de datos y despliegue:"
+	@echo "  make backup                - Genera dump lógico de la DB en ./backups"
+	@echo "  make restore DUMP=archivo  - Restaura un dump sobre la DB del entorno actual"
+	@echo "  make deploy DUMP=archivo   - Update git + restore + arranque app + smoke test"
+	@echo "  make smoke                 - Verifica salud de la app en /health"
 
 # Contenedores
 up:
@@ -90,3 +97,21 @@ run:
 # Target wildcard
 %:
 	@:
+
+
+# Operación de datos y despliegue
+backup:
+	bash scripts/backup_db.sh
+
+restore:
+	@test -n "$(DUMP)" || (echo "Uso: make restore DUMP=./backups/archivo.dump" && exit 1)
+	docker compose up -d db
+	set -a; [ -f .env ] && . ./.env; set +a; \
+	cat "$(DUMP)" | docker compose exec -T db pg_restore -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" --clean --if-exists --no-owner
+
+deploy:
+	@test -n "$(DUMP)" || (echo "Uso: make deploy DUMP=./backups/archivo.dump [REF=main]" && exit 1)
+	bash scripts/restore_and_deploy.sh "$(DUMP)" "$(if $(REF),$(REF),main)"
+
+smoke:
+	curl -fsS http://localhost:8000/health >/dev/null && echo "Smoke test OK"

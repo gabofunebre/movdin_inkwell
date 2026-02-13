@@ -113,3 +113,83 @@ Los contenedores no exponen puertos al host y se comunican entre sí por nombre 
 - PostgreSQL lo hace en el puerto `5432` del contenedor `movdin-db`
 
 La aplicación también se une a la red externa `cloudflared_net` para poder ser accesible desde otros servicios. Utiliza `docker compose exec` u otros contenedores para interactuar con los servicios.
+
+## Operación: backup, restore y deploy entre servidores
+
+Este proyecto incluye scripts para migrar datos entre servidores y actualizar
+la app al commit más reciente sin perder información.
+
+### Conceptos rápidos
+
+- **Dump**: backup lógico de PostgreSQL (archivo `.dump`) generado con `pg_dump`.
+- **Restore**: carga de ese dump en otra base de datos con `pg_restore`.
+- **Smoke test**: verificación rápida post-deploy para comprobar que la app
+  responde (por ejemplo, endpoint `/health`).
+
+### Scripts disponibles
+
+- `scripts/backup_db.sh`
+  - Se ejecuta en el servidor origen (actual/productivo).
+  - Detiene temporalmente `app`, genera dump lógico y vuelve a iniciar `app`.
+  - Salida por defecto: `./backups/movdin_YYYYMMDD_HHMMSS.dump`.
+
+- `scripts/restore_and_deploy.sh <ruta_dump> [ref_git]`
+  - Se ejecuta en el servidor destino.
+  - Actualiza código (`main` por defecto), levanta DB, restaura dump, levanta app y corre smoke test en `/health`.
+
+> Importante: el transporte del archivo `.dump` entre servidores corre por tu
+> cuenta (por ejemplo con `scp` o `rsync`).
+
+### Flujo recomendado
+
+1. En servidor origen:
+
+   ```bash
+   make backup
+   ```
+
+2. Transferir dump al servidor destino:
+
+   ```bash
+   scp ./backups/movdin_YYYYMMDD_HHMMSS.dump usuario@servidor-nuevo:/ruta/
+   ```
+
+3. En servidor destino, restaurar y desplegar:
+
+   ```bash
+   make deploy DUMP=/ruta/movdin_YYYYMMDD_HHMMSS.dump REF=main
+   ```
+
+4. Smoke test manual opcional:
+
+   ```bash
+   make smoke
+   ```
+
+### Comandos Makefile agregados
+
+- `make backup`
+- `make restore DUMP=./backups/archivo.dump`
+- `make deploy DUMP=./backups/archivo.dump [REF=main]`
+- `make smoke`
+
+### Nota para replicar la misma operatoria en una app hermana
+
+Podés aplicar exactamente la misma idea en otro repositorio:
+
+1. Crear `scripts/backup_db.sh` y `scripts/restore_and_deploy.sh` adaptando
+   nombres de servicios Docker Compose y endpoint de smoke test.
+2. Agregar objetivos `backup`, `restore`, `deploy`, `smoke` al `Makefile`.
+3. Documentar el flujo en README con los mismos pasos (backup → transporte → restore/deploy → smoke).
+
+Prompt sugerido para Codex en la app hermana:
+
+```text
+Necesito replicar en este repo la operatoria de migración que usamos en Movdin:
+1) crear scripts scripts/backup_db.sh y scripts/restore_and_deploy.sh,
+2) agregar targets backup/restore/deploy/smoke al Makefile,
+3) actualizar README con una sección Operación (dump/restore/smoke/rollback básico),
+4) usar PostgreSQL en docker compose con variables del .env,
+5) dejar validaciones robustas y mensajes claros en español.
+Luego corré validaciones de sintaxis bash y mostrame los comandos exactos para usar en origen y destino.
+```
